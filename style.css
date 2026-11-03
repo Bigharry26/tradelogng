@@ -45,3 +45,4 @@ input{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-r
 .toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
 .toast.on{opacity:1}
 .auth{padding-top:40px}.auth h1{font-size:26px;margin-bottom:4px}
+.sync{display:block;width:100%;text-align:left;background:var(--amberbg);color:var(--amber);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:14px;font-weight:600}

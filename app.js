@@ -1,4 +1,4 @@
-const sb=supabase.createClient('https://eroiisvhptcizpxnmeup.supabase.co','sb_publishable_nz83rTMAUIKiN2gx3h1Rww_LS_aPxG1');
+const sb=supabase.createClient('https://eroiisvhptcizpxnmeup.supabase.co','sb_publishable_nz83rTMAUIKiN2gx3h1Rww_LS_aPxG1',{global:{fetch:(u,o)=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),15000);return fetch(u,{...o,signal:c.signal}).finally(()=>clearTimeout(t))}}});
 const $=i=>document.getElementById(i);
 const naira=n=>'₦'+Number(n).toLocaleString('en-NG');
 const pad=n=>String(n).padStart(2,'0');
@@ -10,11 +10,65 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const waNum=s=>{const d=String(s||'').replace(/\D/g,'');if(d.indexOf('234')==0)return d;if(d[0]=='0')return '234'+d.slice(1);if(d.length==10)return '234'+d;return d};
 const fmtD=s=>new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 const fmtK=n=>n>=1000?Math.round(n/1000)+'k':String(n);
-const S={user:null,shop:'',debts:[],pays:[],sales:[],recovery:false,tab:1,sheet:null,mode:'in',busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
+const S={user:null,shop:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,tab:1,sheet:null,mode:'in',busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2200)}
 function ok(r){if(r.error)throw r.error;return r.data}
 async function fetchAll(build){let out=[],from=0;for(;;){const data=ok(await build().range(from,from+999));out=out.concat(data);if(data.length<1000)break;from+=1000}return out}
+const isNet=e=>{const m=String((e&&e.message)||e||'');return !navigator.onLine||/fetch|network|abort|timeout|timed out|offline|load failed|failed to connect/i.test(m)};
+const isTmp=id=>typeof id=='string'&&id.charAt(0)=='n';
+const newCid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2);
+const tmpId=()=>'n'+newCid();
+function persist(){try{if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,debts:S.debts,pays:S.pays,sales:S.sales,q:S.q,map:S.map}))}catch(e){}}
+function enqueue(it){S.q.push(it);persist()}
+function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};return true}return false}
+function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={}}}
+function banner(){const n=S.q.length;if(!n&&!S.offline)return '';return `<button class="sync" data-act="sync">${n?n+(n==1?' entry is':' entries are')+' saved on this phone and waiting to send. Tap to retry.':'No network. Showing records saved on this phone.'}</button>`}
+function softRender(){const a=document.activeElement;if(a&&a.tagName=='INPUT')return;render()}
+async function insIdem(t,row){const r=await sb.from(t).insert(row).select().single();
+ if(r.error&&r.error.code=='23505'){const g=await sb.from(t).select('*').eq('cid',row.cid).single();if(g.error)throw g.error;return g.data}
+ if(r.error)throw r.error;return r.data}
+async function runItem(it){const R=id=>S.map[id]||id;
+ if(it.k=='debt'){const r=await insIdem('debts',{...it.row,cid:it.cid});S.map[it.tmp]=r.id}
+ else if(it.k=='sale'){const r=await insIdem('sales',{...it.row,cid:it.cid});S.map[it.tmp]=r.id}
+ else if(it.k=='pay'){await insIdem('payments',{debt_id:R(it.debt),amount:it.row.amount,cid:it.cid})}
+ else if(it.k=='upd'){ok(await sb.from('debts').update(it.row).eq('id',R(it.debt)))}
+ else if(it.k=='del'){ok(await sb.from('debts').delete().eq('id',R(it.debt)))}
+ else if(it.k=='delsale'){ok(await sb.from('sales').delete().eq('id',R(it.id)))}}
+async function sync(){
+ if(!S.user)return;
+ if(S.syncing){S.again=true;return}
+ S.syncing=true;
+ try{
+  const g=await sb.auth.getSession();
+  if(!g.data.session){
+   const down=!navigator.onLine||(g.error&&(isNet(g.error)||g.error.name=='AuthRetryableFetchError'));
+   if(down)S.offline=true;else{S.user=null;toast('Please sign in again. Your saved entries will be sent.')}
+  }else{
+   while(S.q.length){
+    const it=S.q[0];
+    try{await runItem(it);S.q=S.q.filter(i=>i!==it);persist()}
+    catch(err){
+     if(isNet(err))throw err;
+     it.n=(it.n||0)+1;persist();
+     if(/^(22|23)/.test(String(err.code||''))||it.n>=3){S.q=S.q.filter(i=>i!==it);persist();toast('One entry could not be saved')}
+     else throw err}
+   }
+   if(await loadAll()){S.map={};persist()}
+   S.offline=false;
+  }
+ }catch(err){console.error(err);S.offline=true}
+ const again=S.again;S.again=false;S.syncing=false;
+ if(!S.user){render();return}
+ if(again&&S.q.length&&!S.offline){return sync()}
+ softRender()}
 async function loadAll(){
+ const sh=await sb.from('shops').select('name').maybeSingle();if(sh.error)throw sh.error;
+ const d=await fetchAll(()=>sb.from('debts').select('*').order('id'));
+ const p=await fetchAll(()=>sb.from('payments').select('*').order('id'));
+ const sl=await fetchAll(()=>sb.from('sales').select('*').gte('sale_date',off(-200)).order('id'));
+ if(S.q.length)return false;
+ S.shop=sh.data?sh.data.name:'';S.debts=d;S.pays=p;S.sales=sl;persist();return true}
+async function loadAllOld(){
  const sh=await sb.from('shops').select('name').maybeSingle();
  S.shop=sh.data?sh.data.name:'';
  S.debts=await fetchAll(()=>sb.from('debts').select('*').order('id'));
@@ -78,19 +132,20 @@ function recoveryView(){return `<div class="auth"><div class="brand">TradeLog NG
 function render(){
  if(S.recovery){$('app').innerHTML=recoveryView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  if(!S.user){$('app').innerHTML=authView();$('nav').innerHTML='';$('sheet').className='sheet';return}
- $('app').innerHTML=[0,debtsView,salesView,tonightView,reportsView][S.tab]();
+ $('app').innerHTML=banner()+[0,debtsView,salesView,tonightView,reportsView][S.tab]();
  $('nav').innerHTML='<div>'+[['Debts',1],['Sales',2],['Tonight',3],['Reports',4]].map(t=>`<button data-act="tab" data-v="${t[1]}" aria-selected="${S.tab==t[1]}">${t[0]}</button>`).join('')+'</div>';
  $('sheet').innerHTML=sheetView();$('sheet').className='sheet'+(S.sheet?' on':'');
 }
-async function reload(){await loadAll();render()}
+async function reload(){await sync()}
 async function act(a,v){
  if(a=='mode'){S.mode=S.mode=='in'?'up':'in';render()}
- else if(a=='signin'){const r=ok(await sb.auth.signInWithPassword({email:(S.d.email||'').trim(),password:S.d.password||''}));S.user=r.user;S.d={method:'Cash'};await reload()}
+ else if(a=='signin'){const r=ok(await sb.auth.signInWithPassword({email:(S.d.email||'').trim(),password:S.d.password||''}));S.user=r.user;switchUser(r.user.id);S.d={method:'Cash'};await reload()}
  else if(a=='signup'){const e=(S.d.email||'').trim(),p=S.d.password||'';if(!e||p.length<6){toast('Add your email and a password of 6 or more characters');return}
   const r=ok(await sb.auth.signUp({email:e,password:p}));
   if(!r.session){toast('Check your email to confirm, then sign in');S.mode='in';render();return}
-  S.user=r.user;ok(await sb.from('shops').upsert({user_id:S.user.id,name:(S.d.shop||'').trim()||'My shop'}));S.d={method:'Cash'};await reload()}
- else if(a=='out'){await sb.auth.signOut();S.user=null;S.debts=[];S.pays=[];S.sales=[];S.d={method:'Cash'};render()}
+  S.user=r.user;switchUser(r.user.id);ok(await sb.from('shops').upsert({user_id:S.user.id,name:(S.d.shop||'').trim()||'My shop'}));S.d={method:'Cash'};await reload()}
+ else if(a=='sync'){sync();toast('Trying to send...')}
+ else if(a=='out'){if(S.q.length&&!confirm(S.q.length+' entries have not been sent yet. Signing out will lose them. Sign out anyway?'))return;try{await sb.auth.signOut({scope:'local'})}catch(e){}S.user=null;S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.uid=null;try{localStorage.removeItem('tl_cache')}catch(e){}S.d={method:'Cash'};render()}
  else if(a=='tab'){S.tab=Number(v);S.rsel=0;render()}
  else if(a=='rp'){S.rp=v;S.rsel=0;render()}
  else if(a=='rb'){S.rsel=Number(v);render()}
@@ -98,31 +153,31 @@ async function act(a,v){
  else if(a=='adddebt'){S.d.dn='';S.d.dp='';S.d.da='';S.d.dd=off(7);S.sheet='debt';render()}
  else if(a=='close'){S.sheet=null;render()}
  else if(a=='savedebt'){const n=(S.d.dn||'').trim(),am=Number(S.d.da);if(!n||!(am>0)||!S.d.dd){toast('Add name, amount and due date');return}
-  ok(await sb.from('debts').insert({customer_name:n,phone:(S.d.dp||'').trim()||null,amount:am,due_date:S.d.dd}));S.sheet=null;await reload();toast('Debt saved')}
+  const tmp=tmpId(),row={customer_name:n,phone:(S.d.dp||'').trim()||null,amount:am,due_date:S.d.dd};S.debts.push({id:tmp,paid:false,paid_at:null,...row,created_at:new Date().toISOString()});enqueue({k:'debt',cid:newCid(),tmp,row});S.sheet=null;render();toast('Debt saved');sync()}
  else if(a=='pay'){const x=S.debts.find(z=>z.id==v);S.remId=v;S.d.pa=String(balOf(x));S.sheet='pay';render()}
  else if(a=='savepay'){const x=S.debts.find(z=>z.id==S.remId),am=Number(S.d.pa),b=balOf(x);if(!(am>0)){toast('Enter the amount paid');return}if(am>b){toast('That is more than the '+naira(b)+' owed');return}
-  ok(await sb.from('payments').insert({debt_id:x.id,amount:am}));
-  if(am>=b)ok(await sb.from('debts').update({paid:true,paid_at:new Date().toISOString()}).eq('id',x.id));
-  S.sheet=null;await reload();toast(am>=b?'Fully paid':'Payment saved')}
+  S.pays.push({id:tmpId(),debt_id:x.id,amount:am,created_at:new Date().toISOString()});enqueue({k:'pay',cid:newCid(),debt:x.id,row:{amount:am}});
+  if(am>=b){x.paid=true;x.paid_at=new Date().toISOString();enqueue({k:'upd',debt:x.id,row:{paid:true,paid_at:x.paid_at}})}
+  S.sheet=null;render();toast(am>=b?'Fully paid':'Payment saved');sync()}
  else if(a=='edit'){const x=S.debts.find(z=>z.id==v);S.remId=v;S.d.en=x.customer_name;S.d.ep=x.phone||'';S.d.ea=String(x.amount);S.d.ed=x.due_date;S.sheet='edit';render()}
  else if(a=='saveedit'){const x=S.debts.find(z=>z.id==S.remId),n=(S.d.en||'').trim(),am=Number(S.d.ea);if(!n||!(am>0)||!S.d.ed){toast('Add name, amount and due date');return}
   if(am<paidOf(x)){toast('Amount cannot be less than the '+naira(paidOf(x))+' already paid');return}
-  ok(await sb.from('debts').update({customer_name:n,phone:(S.d.ep||'').trim()||null,amount:am,due_date:S.d.ed,paid:am<=paidOf(x)}).eq('id',x.id));S.sheet=null;await reload();toast('Changes saved')}
- else if(a=='deldebt'){if(!confirm('Delete this debt and its payments?'))return;ok(await sb.from('debts').delete().eq('id',S.remId));S.sheet=null;await reload();toast('Debt deleted')}
+  const row={customer_name:n,phone:(S.d.ep||'').trim()||null,amount:am,due_date:S.d.ed,paid:am<=paidOf(x)};Object.assign(x,row);enqueue({k:'upd',debt:x.id,row});S.sheet=null;render();toast('Changes saved');sync()}
+ else if(a=='deldebt'){if(!confirm('Delete this debt and its payments?'))return;const id=S.remId;S.debts=S.debts.filter(z=>z.id!=id);S.pays=S.pays.filter(p=>p.debt_id!=id);if(isTmp(id)&&!S.map[id])S.q=S.q.filter(i=>i.tmp!=id&&i.debt!=id);else S.q.push({k:'del',debt:id});persist();S.sheet=null;render();toast('Debt deleted');sync()}
  else if(a=='forgot'){const e=(S.d.email||'').trim();if(!e){toast('Type your email above first');return}ok(await sb.auth.resetPasswordForEmail(e,{redirectTo:location.origin+location.pathname}));toast('Reset link sent. Check your email.')}
  else if(a=='newpass'){const p=S.d.np||'';if(p.length<6){toast('Use 6 or more characters');return}ok(await sb.auth.updateUser({password:p}));S.recovery=false;S.d={method:'Cash'};const g=await sb.auth.getSession();S.user=g.data.session?g.data.session.user:null;await reload();toast('Password changed')}
  else if(a=='remind'){const x=S.debts.find(z=>z.id==v);S.remId=v;S.d.rph=x.phone||'';S.sheet='remind';render()}
  else if(a=='send'){const n=waNum(S.d.rph),x=S.debts.find(z=>z.id==S.remId);if(n.length!=13){toast('Enter a valid Nigerian number');return}
-  ok(await sb.from('debts').update({phone:S.d.rph.trim()}).eq('id',x.id));x.phone=S.d.rph.trim();
+  x.phone=S.d.rph.trim();enqueue({k:'upd',debt:x.id,row:{phone:x.phone}});sync();
   const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';
   S.sheet=null;render();window.open('https://wa.me/'+n+'?text='+encodeURIComponent(msg),'_blank')}
  else if(a=='addsale'){const it=(S.d.item||'').trim(),am=Number(S.d.amount),m=S.d.method||'Cash';let name=it;
   if(!it||!(am>0)){toast('Add what was sold and the amount');return}
   if(m=='Credit'){const c=(S.d.cust||'').trim();if(!c){toast('Add the customer who owes');return}
-   ok(await sb.from('debts').insert({customer_name:c,phone:(S.d.sph||'').trim()||null,amount:am,due_date:off(7)}));name=it+', '+c}
-  ok(await sb.from('sales').insert({item:name,amount:am,method:m,sale_date:off(0)}));
-  S.d={method:m};await reload();toast('Sale added')}
- else if(a=='delsale'){ok(await sb.from('sales').delete().eq('id',v));await reload();toast('Sale removed')}
+   const row={customer_name:c,phone:(S.d.sph||'').trim()||null,amount:am,due_date:off(7)},tmp=tmpId();S.debts.push({id:tmp,paid:false,paid_at:null,...row,created_at:new Date().toISOString()});enqueue({k:'debt',cid:newCid(),tmp,row});name=it+', '+c}
+  {const tmp=tmpId(),row={item:name,amount:am,method:m,sale_date:off(0)};S.sales.push({id:tmp,...row,created_at:new Date().toISOString()});enqueue({k:'sale',cid:newCid(),tmp,row})}
+  S.d={method:m};render();toast('Sale added');sync()}
+ else if(a=='delsale'){S.sales=S.sales.filter(s=>s.id!=v);if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delsale',id:v});persist();render();toast('Sale removed');sync()}
 }
 document.addEventListener('input',e=>{const k=e.target.dataset.d;if(k)S.d[k]=e.target.value});
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]');if(!b||S.busy)return;S.busy=true;
@@ -130,4 +185,15 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]
  S.busy=false});
 sb.auth.onAuthStateChange(ev=>{if(ev=='PASSWORD_RECOVERY'){S.recovery=true;render()}});
 if(/type=recovery/.test(location.hash))S.recovery=true;
-(async()=>{try{const {data}=await sb.auth.getSession();if(data.session){S.user=data.session.user;await loadAll()}}catch(e){console.error(e)}render()})();
+window.addEventListener('online',()=>sync());
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
+setInterval(()=>{if(S.user&&(S.q.length||S.offline))sync()},30000);
+(async()=>{
+ let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}
+ let sess=null,down=false;
+ try{const g=await sb.auth.getSession();sess=g.data.session;if(!sess&&g.error&&(isNet(g.error)||g.error.name=='AuthRetryableFetchError'))down=true}catch(e){down=true}
+ if(sess){S.user=sess.user;if(!useCache(c,sess.user.id)){try{await loadAll()}catch(e){S.offline=true}}}
+ else if(c&&c.uid&&down){S.user={id:c.uid};useCache(c,c.uid);S.offline=true}
+ render();
+ if(S.user)sync();
+})();
