@@ -181,7 +181,7 @@ function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good mornin
  h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${new Set(o.map(x=>ck(x.customer_name))).size}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
  h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button><button class="full alt" data-act="go" data-v="5">Add an expense</button>`;
  if(late.length)h+=`<button class="full" style="background:var(--wa);color:#06260f" data-act="rall">Remind overdue (${late.length})</button>`;
- h+=`<h2 class="sec">About</h2><a class="full alt" style="display:block;text-align:center;text-decoration:none;border-radius:10px;font-weight:600" href="privacy.html" target="_blank">Privacy policy and terms</a><h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="color:var(--red)" data-act="wipe">Clear all my records</button><button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
+ h+=`<h2 class="sec">About</h2><a class="full alt" style="display:block;text-align:center;text-decoration:none;border-radius:10px;font-weight:600" href="privacy.html" target="_blank">Privacy policy and terms</a><h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="color:var(--red)" data-act="wipeopen">Clear all my records</button><button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
  return h}
 function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}">${goodPhoto()?'<button class="full alt" data-act="rmphoto">Remove photo</button>':''}<button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
 const dueFilter=x=>{const k=dayDiff(x.due_date);return S.ff=='late'?k<0:S.ff=='soon'?(k>=0&&k<=7):true};
@@ -359,7 +359,7 @@ const GUIDE=[
 {q:"How do I change my name, shop name or picture?",s:["Open **Home**.","Tap the round picture to choose a new photo.","Tap **Edit profile** to change your name, shop name or phone number."]},
 {q:"I forgot my password",s:["On the log in page, type your email.","Tap **Forgot password?**.","Open the email we send you and tap the link.","Type your new password twice and tap **Save new password**."],t:"If the email does not arrive after a few minutes, check your spam folder."},
 {q:"How do I put the app on my phone?",s:["Open the app link in **Chrome**.","Tap the **⋮** menu at the top right.","Tap **Install and create shortcut** (or **Add to Home screen**), then confirm.","Open it from the new icon on your home screen."]},
-{q:"How do I clear everything and start fresh?",s:["Download any reports you want to keep first.","Open **Home**, scroll down and tap **Clear all my records**.","Type **DELETE** to confirm. Your login and profile stay."],t:"This cannot be undone."}
+{q:"How do I clear everything and start fresh?",s:["Download any reports you want to keep first.","Open **Home**, scroll down and tap **Clear all my records**.","Type your password to confirm. Your login and profile stay."],t:"This cannot be undone."}
 ];
 function guideList(){const q=(S.gq||'').trim().toLowerCase(),l=GUIDE.filter(g=>!q||(g.q+' '+g.s.join(' ')+' '+(g.t||'')).toLowerCase().includes(q));
  if(!l.length)return '<div class="empty">No help found for “'+esc(S.gq)+'”. Try a simpler word like sale, debt, payment or report.</div>';
@@ -372,6 +372,7 @@ function heroEye(){const hide=heroHid();
   const b=document.createElement('button');b.className='heye';b.setAttribute('data-act','hide');b.setAttribute('aria-label',hide?'Show amounts':'Hide amounts');b.innerHTML=hide?eyeOff:eyeOn;h.appendChild(b)})}
 function sheetView(){
  if(S.sheet=='cust')return custSheet();
+ if(S.sheet=='wipe')return `<div class="panel"><h1>Clear all my records</h1><div class="shop">This erases ALL your sales, debts, payments and expenses for good. Your login and profile stay. Download your reports first if you want to keep them.</div>`+pwField('wp','Type your password to confirm','current-password')+`<button class="full" style="background:var(--red);color:#fff" data-act="wipe">Erase everything</button><button class="full alt" data-act="close">Cancel</button></div>`;
  if(S.sheet=='guide')return guideSheet();
  if(S.sheet=='notif')return notifSheet();
  if(S.sheet=='doc'&&S.doc)return docSheet();
@@ -485,16 +486,18 @@ async function act(a,v){
   if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delpay',id:v});
   if(x&&x.paid&&balOf(x)>0){x.paid=false;x.paid_at=null;enqueue({k:'upd',debt:x.id,row:{paid:false,paid_at:null}})}
   persist();render();toast('Payment removed');sync()}
+ else if(a=='wipeopen'){S.d.wp='';S.show=false;S.sheet='wipe';render()}
  else if(a=='wipe'){
   if(!navigator.onLine){toast('Connect to the network first');return}
-  const t=prompt('This erases ALL your sales, debts, payments and expenses for good. Your login and profile stay.\n\nType DELETE to continue.');
-  if(t===null)return;if(String(t).trim().toUpperCase()!=='DELETE'){toast('Nothing was erased');return}
+  const pw=S.d.wp||'';if(!pw){toast('Type your password');return}
+  const em=S.user&&S.user.email;if(!em){toast('Please sign in again first');return}
+  const chk=await sb.auth.signInWithPassword({email:em,password:pw});if(chk.error){toast(isNet(chk.error)?'No network. Try again.':'Wrong password');return}
   S.q=[];persist();
   ok(await sb.from('payments').delete().gte('id',0));
   ok(await sb.from('sales').delete().gte('id',0));
   ok(await sb.from('expenses').delete().gte('id',0));
   ok(await sb.from('debts').delete().gte('id',0));
-  S.debts=[];S.pays=[];S.sales=[];S.ex=[];S.map={};S.sent={};S.day=null;S.offline=false;persist();S.tab=0;render();toast('All records cleared')}
+  S.debts=[];S.pays=[];S.sales=[];S.ex=[];S.map={};S.sent={};S.day=null;S.sheet=null;S.d.wp='';S.offline=false;persist();S.tab=0;render();toast('All records cleared')}
  else if(a=='bell'){S.sheet='notif';render()}
  else if(a=='nremind'){const x=debtOf(v);if(!x)return;markSeen(x);S.remId=v;S.d.rph=x.phone||'';S.sheet='remind';render()}
  else if(a=='seenall'){const sn=seenLoad();notifs().urgent.forEach(x=>{sn.k[nkey(x)]=1});seenSave(sn);render();toast('Marked as seen')}
