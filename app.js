@@ -10,7 +10,7 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const waNum=s=>{const d=String(s||'').replace(/\D/g,'');if(d.indexOf('234')==0)return d;if(d[0]=='0')return '234'+d.slice(1);if(d.length==10)return '234'+d;return d};
 const fmtD=s=>new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 const fmtK=n=>n>=1000?Math.round(n/1000)+'k':String(n);
-const S={user:null,shop:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,tab:1,sheet:null,mode:'in',busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
+const S={user:null,shop:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,day:null,fd:'',fs:'',tab:1,sheet:null,mode:'in',busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2200)}
 function ok(r){if(r.error)throw r.error;return r.data}
 async function fetchAll(build){let out=[],from=0;for(;;){const data=ok(await build().range(from,from+999));out=out.concat(data);if(data.length<1000)break;from+=1000}return out}
@@ -65,7 +65,7 @@ async function loadAll(){
  const sh=await sb.from('shops').select('name').maybeSingle();if(sh.error)throw sh.error;
  const d=await fetchAll(()=>sb.from('debts').select('*').order('id'));
  const p=await fetchAll(()=>sb.from('payments').select('*').order('id'));
- const sl=await fetchAll(()=>sb.from('sales').select('*').gte('sale_date',off(-200)).order('id'));
+ const sl=await fetchAll(()=>sb.from('sales').select('*').gte('sale_date',off(-730)).order('id'));
  if(S.q.length)return false;
  S.shop=sh.data?sh.data.name:'';S.debts=d;S.pays=p;S.sales=sl;persist();return true}
 async function loadAllOld(){
@@ -96,24 +96,51 @@ function authView(){const up=S.mode=='up';
  <label>Password (6 or more characters)</label><input data-d="password" type="password" autocomplete="${up?'new-password':'current-password'}" value="${esc(S.d.password)}">
  <button class="full" data-act="${up?'signup':'signin'}">${up?'Create account':'Sign in'}</button>
  <button class="full alt" data-act="mode">${up?'I already have an account':'Create a new account'}</button>${up?'':'<button class="full alt" data-act="forgot">Forgot password?</button>'}</div>`}
+function dayOf(){return S.day||off(0)}
+function dayLabel(d){return d==off(0)?'Today':d==off(-1)?'Yesterday':new Date(d+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}
+const payDay=p=>iso(new Date(p.created_at));
+const debtOf=id=>S.debts.find(z=>z.id==id);
+const colOf=d=>S.pays.filter(p=>payDay(p)==d).reduce((t,p)=>t+Number(p.amount),0);
+function balText(){const am=Number(S.d.amount)||0,pn=Number(S.d.pn)||0;if(!(am>0))return '';if(pn>=am&&pn>0)return 'Paid now must be less than the total price';return 'Customer will owe '+naira(am-(pn>0?pn:0))}
+function collectedHtml(d){const ps=S.pays.filter(p=>payDay(p)==d).slice().reverse();
+ if(!ps.length)return '<div class="empty">No debts collected '+(d==off(0)?'today':'on this day')+'.</div>';
+ return ps.map(p=>{const x=debtOf(p.debt_id);return `<div class="item"><div class="l1"><span class="name">${esc(x?x.customer_name:'Customer')}</span><span class="amt">${naira(p.amount)}</span></div><div class="m">${new Date(p.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}${x&&balOf(x)>0?' · still owes '+naira(balOf(x)):' · fully paid'}</div></div>`}).join('')}
+function debtsList(){const q=(S.fd||'').trim().toLowerCase(),qd=q.replace(/\D/g,'');
+ const list=openD().filter(x=>!q||String(x.customer_name).toLowerCase().includes(q)||(qd.length>2&&String(x.phone||'').replace(/\D/g,'').includes(qd)));
+ let h='';
+ if(!list.length)h+=`<div class="empty">${q?'No customer found for “'+esc(S.fd)+'”.':'Nobody owes you. Tap “Add debt” when someone takes goods on credit.'}</div>`;
+ list.forEach(x=>{const t=tagFor(x);h+=`<div class="item"><div class="l1"><span class="name">${esc(x.customer_name)}</span><span class="amt">${naira(balOf(x))}</span></div>${paidOf(x)>0?`<div class="m">Owed ${naira(x.amount)}, paid ${naira(paidOf(x))}</div>`:''}<span class="tag ${t[0]}">${t[1]}</span><div class="acts"><button class="b1" data-act="remind" data-v="${x.id}">Remind</button><button class="b2" data-act="pay" data-v="${x.id}">Payment</button><button class="b2" data-act="edit" data-v="${x.id}">Edit</button></div></div>`});
+ return h}
 function debtsView(){const list=openD(),total=list.reduce((s,x)=>s+balOf(x),0),late=list.filter(x=>dayDiff(x.due_date)<0).reduce((s,x)=>s+balOf(x),0);
  let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${esc(S.shop||'My shop')}</h1></div><button class="del" data-act="out">Sign out</button></div>`;
  h+=`<div class="hero"><small>Total owed to you</small><div class="big">${naira(total)}</div><div class="row"><span>${list.length} customers</span><span>${naira(late)} overdue</span></div></div>`;
- if(!list.length)h+='<div class="empty">Nobody owes you. Tap “Add debt” when someone takes goods on credit.</div>';
- list.forEach(x=>{const t=tagFor(x);h+=`<div class="item"><div class="l1"><span class="name">${esc(x.customer_name)}</span><span class="amt">${naira(balOf(x))}</span></div>${paidOf(x)>0?`<div class="m">Owed ${naira(x.amount)}, paid ${naira(paidOf(x))}</div>`:''}<span class="tag ${t[0]}">${t[1]}</span><div class="acts"><button class="b1" data-act="remind" data-v="${x.id}">Remind</button><button class="b2" data-act="pay" data-v="${x.id}">Payment</button><button class="b2" data-act="edit" data-v="${x.id}">Edit</button></div></div>`});
+ h+=`<input class="search" data-s="fd" type="search" placeholder="Search customer name or number" value="${esc(S.fd)}">`;
+ h+=`<div id="dlist">${debtsList()}</div>`;
  return h+'<button class="fab" data-act="adddebt">+ Add debt</button>'}
-function salesView(){const ts=S.sales.filter(s=>s.sale_date==off(0)).reverse(),m=S.d.method||'Cash';
- let h=`<div class="top"><div><h1>Today’s sales</h1><div class="shop">Add each sale as it happens</div></div></div>`;
- h+=`<div class="hero"><small>Total sales today</small><div class="big">${naira(sumS())}</div><div class="row"><span>Cash ${naira(sumS('Cash'))}</span><span>Transfer ${naira(sumS('Transfer'))}</span><span>Credit ${naira(sumS('Credit'))}</span></div></div>`;
- h+=`<div class="item"><label style="margin-top:0">What was sold</label><input data-d="item" placeholder="e.g. Garri 2 paints" value="${esc(S.d.item)}"><label>Amount (₦)</label><input data-d="amount" type="number" inputmode="numeric" value="${esc(S.d.amount)}"><label>Paid by</label><div class="chips">`+['Cash','Transfer','Credit'].map(x=>`<button class="chip" data-act="method" data-v="${x}" aria-pressed="${m==x}">${x}</button>`).join('')+'</div>';
- if(m=='Credit')h+=`<label>Customer who owes</label><input data-d="cust" placeholder="e.g. Mrs. Bisi" value="${esc(S.d.cust)}"><label>Their WhatsApp number (optional)</label><input data-d="sph" type="tel" placeholder="0803 123 4567" value="${esc(S.d.sph)}">`;
- h+='<button class="full" data-act="addsale">Add sale</button></div>';
- if(!ts.length)h+='<div class="empty">No sales yet today. Add your first one above.</div>';
- ts.forEach(s=>{h+=`<div class="item"><div class="l1"><span class="name">${esc(s.item)}</span><span class="amt">${naira(s.amount)}</span></div><div class="l1"><span class="m">${s.method}${s.method=='Credit'?' (added to debts)':''}</span><button class="del" data-act="delsale" data-v="${s.id}">Remove</button></div></div>`});
+function salesList(){const q=(S.fs||'').trim().toLowerCase(),d=dayOf();let h='';
+ const row=(s,sd)=>`<div class="item"><div class="l1"><span class="name">${esc(s.item)}</span><span class="amt">${naira(s.amount)}</span></div><div class="l1"><span class="m">${sd?dayLabel(s.sale_date)+' · ':''}${s.method}${s.method=='Credit'?' (added to debts)':''}</span><button class="del" data-act="delsale" data-v="${s.id}">Remove</button></div></div>`;
+ if(q){const r=S.sales.filter(s=>String(s.item).toLowerCase().includes(q)).reverse().sort((a,b)=>a.sale_date<b.sale_date?1:a.sale_date>b.sale_date?-1:0);
+  h+=`<h2 class="sec">Search results (${r.length})</h2>`;
+  if(!r.length)h+=`<div class="empty">No sale found for “${esc(S.fs)}”.</div>`;
+  h+=r.map(s=>row(s,true)).join('')}
+ else{const ts=S.sales.filter(s=>s.sale_date==d).reverse();
+  h+=`<h2 class="sec">Sales (${ts.length})</h2>`;
+  if(!ts.length)h+=`<div class="empty">No sales recorded ${d==off(0)?'yet today':'on this day'}.</div>`;
+  h+=ts.map(s=>row(s,false)).join('');
+  h+=`<h2 class="sec">Debts collected</h2>`+collectedHtml(d)}
  return h}
-function tonightView(){const d0=todayD(),col=S.pays.filter(p=>new Date(p.created_at)>=d0).reduce((s,p)=>s+Number(p.amount),0),owed=openD().reduce((s,x)=>s+balOf(x),0);
- return `<div class="top"><div><h1>Tonight’s summary</h1><div class="shop">Your numbers for today</div></div></div><div class="sum"><p><b>Good evening, ${esc(S.shop||'trader')}.</b></p>
- <div class="r"><span>Sales today</span><b>${naira(sumS())}</b></div><div class="r"><span>Paid in cash</span><b>${naira(sumS('Cash'))}</b></div><div class="r"><span>Paid by transfer</span><b>${naira(sumS('Transfer'))}</b></div><div class="r"><span>New debts (credit sales)</span><b>${naira(sumS('Credit'))}</b></div><div class="r"><span>Debts collected</span><b>${naira(col)}</b></div><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div></div>`}
+function salesView(){const d=dayOf(),m=S.d.method||'Cash',pm=S.d.pm||'Cash',isT=d==off(0);
+ let h=`<div class="top"><div><h1>Sales record</h1><div class="shop">${isT?'Add each sale as it happens':'Adding to '+dayLabel(d)}</div></div></div>`;
+ h+=`<div class="daybar"><button data-act="dayprev" aria-label="Previous day">‹</button><label class="dpick">📅 <b>${dayLabel(d)}</b><input type="date" data-day="1" max="${off(0)}" value="${d}"></label><button data-act="daynext" aria-label="Next day"${isT?' disabled':''}>›</button></div>`;
+ h+=`<div class="hero"><small>Total sales ${isT?'today':'on '+dayLabel(d)}</small><div class="big">${naira(sumS(null,d))}</div><div class="row"><span>Cash ${naira(sumS('Cash',d))}</span><span>Transfer ${naira(sumS('Transfer',d))}</span><span>Credit ${naira(sumS('Credit',d))}</span></div><div class="row"><span>Debts collected ${naira(colOf(d))}</span></div></div>`;
+ h+=`<div class="item"><label style="margin-top:0">What was sold</label><input data-d="item" placeholder="e.g. Garri 2 paints" value="${esc(S.d.item)}"><label>Total price (₦)</label><input data-d="amount" type="number" inputmode="numeric" value="${esc(S.d.amount)}"><label>Paid by</label><div class="chips">`+['Cash','Transfer','Credit'].map(x=>`<button class="chip" data-act="method" data-v="${x}" aria-pressed="${m==x}">${x}</button>`).join('')+'</div>';
+ if(m=='Credit')h+=`<label>Customer who owes</label><input data-d="cust" placeholder="e.g. Mrs. Bisi" value="${esc(S.d.cust)}"><label>Their WhatsApp number (optional)</label><input data-d="sph" type="tel" placeholder="0803 123 4567" value="${esc(S.d.sph)}"><label>Paid now (₦). Leave empty if nothing yet</label><input data-d="pn" type="number" inputmode="numeric" placeholder="0" value="${esc(S.d.pn)}"><label>Paid now by</label><div class="chips">`+['Cash','Transfer'].map(x=>`<button class="chip" data-act="pmethod" data-v="${x}" aria-pressed="${pm==x}">${x}</button>`).join('')+`</div><div class="m" id="bal" style="margin-top:8px">${balText()}</div>`;
+ h+='<button class="full" data-act="addsale">Add sale</button></div>';
+ h+=`<input class="search" data-s="fs" type="search" placeholder="Search all sales by item or customer" value="${esc(S.fs)}">`;
+ h+=`<div id="slist">${salesList()}</div>`;
+ return h}
+function tonightView(){const t=off(0),owed=openD().reduce((s,x)=>s+balOf(x),0);
+ return `<div class="top"><div><h1>Tonight’s summary</h1><div class="shop">Your numbers for today</div></div></div><div class="sum"><p><b>Good evening, ${esc(S.shop||'trader')}.</b></p><div class="r"><span>Sales today</span><b>${naira(sumS(null,t))}</b></div><div class="r"><span>Paid in cash</span><b>${naira(sumS('Cash',t))}</b></div><div class="r"><span>Paid by transfer</span><b>${naira(sumS('Transfer',t))}</b></div><div class="r"><span>New debts (credit sales)</span><b>${naira(sumS('Credit',t))}</b></div><div class="r"><span>Debts collected</span><b>${naira(colOf(t))}</b></div><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div></div><h2 class="sec">Debts collected today</h2>${collectedHtml(t)}`}
 function reportsView(){const m={};S.sales.forEach(s=>{(m[s.sale_date]=m[s.sale_date]||{date:s.sale_date,Cash:0,Transfer:0,Credit:0})[s.method]+=Number(s.amount)});
  const days=Object.values(m),tot=x=>x.Cash+x.Transfer+x.Credit,t0=off(0);
  const dd=bucketsFor(S.rp).map(b=>{const r=days.filter(x=>x.date>=b.from&&x.date<=b.to&&x.date<=t0);return{b,r,t:r.reduce((s,x)=>s+tot(x),0)}});
@@ -171,15 +198,27 @@ async function act(a,v){
   x.phone=S.d.rph.trim();enqueue({k:'upd',debt:x.id,row:{phone:x.phone}});sync();
   const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';
   S.sheet=null;render();window.open('https://wa.me/'+n+'?text='+encodeURIComponent(msg),'_blank')}
- else if(a=='addsale'){const it=(S.d.item||'').trim(),am=Number(S.d.amount),m=S.d.method||'Cash';let name=it;
-  if(!it||!(am>0)){toast('Add what was sold and the amount');return}
-  if(m=='Credit'){const c=(S.d.cust||'').trim();if(!c){toast('Add the customer who owes');return}
-   const row={customer_name:c,phone:(S.d.sph||'').trim()||null,amount:am,due_date:off(7)},tmp=tmpId();S.debts.push({id:tmp,paid:false,paid_at:null,...row,created_at:new Date().toISOString()});enqueue({k:'debt',cid:newCid(),tmp,row});name=it+', '+c}
-  {const tmp=tmpId(),row={item:name,amount:am,method:m,sale_date:off(0)};S.sales.push({id:tmp,...row,created_at:new Date().toISOString()});enqueue({k:'sale',cid:newCid(),tmp,row})}
-  S.d={method:m};render();toast('Sale added');sync()}
+ else if(a=='dayprev'){const d=new Date(dayOf()+'T00:00:00');d.setDate(d.getDate()-1);S.day=iso(d);render()}
+ else if(a=='daynext'){const d=new Date(dayOf()+'T00:00:00');d.setDate(d.getDate()+1);const n=iso(d);S.day=n>=off(0)?null:n;render()}
+ else if(a=='pmethod'){S.d.pm=v;render()}
+ else if(a=='addsale'){const it=(S.d.item||'').trim(),am=Number(S.d.amount),m=S.d.method||'Cash',day=dayOf();
+  if(!it||!(am>0)){toast('Add what was sold and the total price');return}
+  const addSale=(item,amt,meth)=>{const tmp=tmpId(),row={item:item,amount:amt,method:meth,sale_date:day};S.sales.push({id:tmp,...row,created_at:new Date().toISOString()});enqueue({k:'sale',cid:newCid(),tmp,row})};
+  if(m=='Credit'){const c=(S.d.cust||'').trim(),pn=Number(S.d.pn)||0,pm=S.d.pm||'Cash';
+   if(!c){toast('Add the customer who owes');return}
+   if(pn<0||pn>=am){toast(pn>=am?'Paid now must be less than the total. Use Cash or Transfer instead.':'Enter a valid amount');return}
+   const owe=am-pn,row={customer_name:c,phone:(S.d.sph||'').trim()||null,amount:owe,due_date:off(7)},tmp=tmpId();
+   S.debts.push({id:tmp,paid:false,paid_at:null,...row,created_at:new Date().toISOString()});enqueue({k:'debt',cid:newCid(),tmp,row});
+   if(pn>0)addSale(it+', '+c+' (part paid)',pn,pm);
+   addSale(it+', '+c,owe,'Credit')}
+  else addSale(it,am,m);
+  S.d={method:m};render();toast(m=='Credit'?'Saved. The balance is in Debts.':'Sale added');sync()}
  else if(a=='delsale'){S.sales=S.sales.filter(s=>s.id!=v);if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delsale',id:v});persist();render();toast('Sale removed');sync()}
 }
-document.addEventListener('input',e=>{const k=e.target.dataset.d;if(k)S.d[k]=e.target.value});
+document.addEventListener('input',e=>{const t=e.target,k=t.dataset.d,sk=t.dataset.s;
+ if(k){S.d[k]=t.value;if(k=='pn'||k=='amount'){const b=$('bal');if(b)b.textContent=balText()}}
+ else if(sk){S[sk]=t.value;const el=$(sk=='fd'?'dlist':'slist');if(el)el.innerHTML=sk=='fd'?debtsList():salesList()}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.day&&t.value){S.day=t.value==off(0)?null:t.value;render()}});
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]');if(!b||S.busy)return;S.busy=true;
  try{await act(b.dataset.act,b.dataset.v)}catch(err){console.error(err);toast(/fetch|network/i.test(err.message||'')?'No network. Try again.':(err.message||'Something went wrong').slice(0,60))}
  S.busy=false});
