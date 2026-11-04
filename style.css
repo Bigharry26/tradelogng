@@ -128,3 +128,13 @@ nav .nb{position:absolute;top:4px;left:calc(50% + 6px);margin:0}
 .mrows b{font-size:14px;font-variant-numeric:tabular-nums}
 .docwrap .alt{background:#e6f1ea;color:#0a5c34;border:1px solid #cfd8d2}
 @media print{.panel::before{display:none}}
+nav button.gfab{position:fixed;left:max(16px,calc(50% - 199px));bottom:calc(84px + env(safe-area-inset-bottom,0px));flex:none;width:48px;height:48px;border-radius:50%;padding:0;background:var(--card);color:var(--green);border:1px solid var(--line);box-shadow:0 4px 14px rgba(0,0,0,.2);font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-direction:row;letter-spacing:0}
+.gd{border:1px solid var(--line);border-radius:12px;margin-top:8px;background:var(--card)}
+.gd summary{padding:13px 14px;font-weight:600;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.gd summary::-webkit-details-marker{display:none}
+.gd summary::after{content:"+";color:var(--mute);font-weight:400;font-size:22px;line-height:1}
+.gd[open] summary::after{content:"–"}
+.gd .gb{padding:0 14px 14px;font-size:15px}
+.gd ol{margin:4px 0;padding-left:20px}
+.gd li{margin:7px 0}
+.gtip{margin-top:10px;padding:10px 12px;background:var(--greenbg);color:var(--green);border-radius:8px;font-size:13.5px}
