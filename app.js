@@ -179,7 +179,7 @@ function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good mornin
  h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${new Set(o.map(x=>ck(x.customer_name))).size}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
  h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button><button class="full alt" data-act="go" data-v="5">Add an expense</button>`;
  if(late.length)h+=`<button class="full" style="background:var(--wa);color:#06260f" data-act="rall">Remind overdue (${late.length})</button>`;
- h+=`<h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
+ h+=`<h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="color:var(--red)" data-act="wipe">Clear all my records</button><button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
  return h}
 function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}">${goodPhoto()?'<button class="full alt" data-act="rmphoto">Remove photo</button>':''}<button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
 const dueFilter=x=>{const k=dayDiff(x.due_date);return S.ff=='late'?k<0:S.ff=='soon'?(k>=0&&k<=7):true};
@@ -418,6 +418,16 @@ async function act(a,v){
   if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delpay',id:v});
   if(x&&x.paid&&balOf(x)>0){x.paid=false;x.paid_at=null;enqueue({k:'upd',debt:x.id,row:{paid:false,paid_at:null}})}
   persist();render();toast('Payment removed');sync()}
+ else if(a=='wipe'){
+  if(!navigator.onLine){toast('Connect to the network first');return}
+  const t=prompt('This erases ALL your sales, debts, payments and expenses for good. Your login and profile stay.\n\nType DELETE to continue.');
+  if(t===null)return;if(String(t).trim().toUpperCase()!=='DELETE'){toast('Nothing was erased');return}
+  S.q=[];persist();
+  ok(await sb.from('payments').delete().gte('id',0));
+  ok(await sb.from('sales').delete().gte('id',0));
+  ok(await sb.from('expenses').delete().gte('id',0));
+  ok(await sb.from('debts').delete().gte('id',0));
+  S.debts=[];S.pays=[];S.sales=[];S.ex=[];S.map={};S.sent={};S.day=null;S.offline=false;persist();S.tab=0;render();toast('All records cleared')}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
  else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();window.open('https://wa.me/'+waNum(x.phone)+'?text='+encodeURIComponent(msg),'_blank')}
