@@ -365,6 +365,11 @@ function guideList(){const q=(S.gq||'').trim().toLowerCase(),l=GUIDE.filter(g=>!
  if(!l.length)return '<div class="empty">No help found for “'+esc(S.gq)+'”. Try a simpler word like sale, debt, payment or report.</div>';
  return l.map(g=>`<details class="gd"><summary>${esc(g.q)}</summary><div class="gb"><ol>${g.s.map(x=>'<li>'+fm(x)+'</li>').join('')}</ol>${g.t?'<div class="gtip">'+fm(g.t)+'</div>':''}</div></details>`).join('')}
 function guideSheet(){return `<div class="panel"><h1>How to use TradeLog NG</h1><div class="shop">Tap a question to see the steps.</div><input class="search" data-s="gq" type="search" placeholder="Search help, e.g. part payment" value="${esc(S.gq)}"><div id="glist">${guideList()}</div><button class="full alt" data-act="close">Close</button></div>`}
+const heroHid=()=>{try{return localStorage.getItem('tl_hide')=='1'}catch(e){return false}};
+function heroEye(){const hide=heroHid();
+ document.querySelectorAll('#app .hero').forEach(h=>{
+  if(hide){const w=document.createTreeWalker(h,NodeFilter.SHOW_TEXT),L=[];while(w.nextNode())L.push(w.currentNode);L.forEach(n=>{n.nodeValue=n.nodeValue.replace(/-?₦[\d,]+(\.\d+)?/g,'₦ ••••')})}
+  const b=document.createElement('button');b.className='heye';b.setAttribute('data-act','hide');b.setAttribute('aria-label',hide?'Show amounts':'Hide amounts');b.innerHTML=hide?eyeOff:eyeOn;h.appendChild(b)})}
 function sheetView(){
  if(S.sheet=='cust')return custSheet();
  if(S.sheet=='guide')return guideSheet();
@@ -386,7 +391,7 @@ function render(){
  if(S.user&&!S.lockChecked){S.lockChecked=true;const pn=getPin();if(pn&&pn.u==S.user.id)S.locked=true}
  if(S.user&&S.locked){$('app').innerHTML=lockView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  if(!S.user){$('app').innerHTML=authView();$('nav').innerHTML='';$('sheet').className='sheet';return}
- $('app').innerHTML=banner()+[homeView,debtsView,salesView,tonightView,reportsView,expensesView][S.tab]();
+ $('app').innerHTML=banner()+[homeView,debtsView,salesView,tonightView,reportsView,expensesView][S.tab]();heroEye();
  $('nav').innerHTML='<button class="gfab" data-act="guide" aria-label="Help guide">?</button><div>'+[['Home',0],['Debts',1],['Sales',2],['Expenses',5],['Tonight',3],['Reports',4]].map(t=>`<button data-act="tab" data-v="${t[1]}" aria-selected="${S.tab==t[1]}">${navIcon(t[1])}<span>${t[0]}</span>${t[1]==1&&badgeN()?`<span class="nb">${badgeN()}</span>`:''}</button>`).join('')+'</div>';
  $('sheet').innerHTML=sheetView();$('sheet').className='sheet'+(S.sheet?' on':'');
 }
@@ -494,6 +499,7 @@ async function act(a,v){
  else if(a=='nremind'){const x=debtOf(v);if(!x)return;markSeen(x);S.remId=v;S.d.rph=x.phone||'';S.sheet='remind';render()}
  else if(a=='seenall'){const sn=seenLoad();notifs().urgent.forEach(x=>{sn.k[nkey(x)]=1});seenSave(sn);render();toast('Marked as seen')}
  else if(a=='guide'){S.gq='';S.sheet='guide';render()}
+ else if(a=='hide'){try{localStorage.setItem('tl_hide',heroHid()?'0':'1')}catch(e){}render()}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
  else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();window.open('https://wa.me/'+waNum(x.phone)+'?text='+encodeURIComponent(msg),'_blank')}
