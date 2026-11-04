@@ -59,3 +59,6 @@ input{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-r
 .avatar{width:56px;height:56px;border-radius:50%;background:var(--green);color:var(--on);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;flex:none}
 .avatar{overflow:hidden;cursor:pointer}
 .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.pw{position:relative}
+.pw input{padding-right:50px}
+.eye{position:absolute;right:2px;top:50%;transform:translateY(-50%);background:none;color:var(--mute);padding:10px;width:auto;display:flex}
