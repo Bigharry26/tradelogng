@@ -10,7 +10,7 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const waNum=s=>{const d=String(s||'').replace(/\D/g,'');if(d.indexOf('234')==0)return d;if(d[0]=='0')return '234'+d.slice(1);if(d.length==10)return '234'+d;return d};
 const fmtD=s=>new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 const fmtK=n=>n>=1000?Math.round(n/1000)+'k':String(n);
-const S={user:null,shop:'',owner:'',phone:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,day:null,fd:'',fs:'',ff:'all',sent:{},tab:0,sheet:null,mode:'in',busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
+const S={user:null,shop:'',owner:'',phone:'',photo:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,day:null,fd:'',fs:'',ff:'all',sent:{},tab:0,sheet:null,mode:'in',busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2200)}
 function ok(r){if(r.error)throw r.error;return r.data}
 async function fetchAll(build){let out=[],from=0;for(;;){const data=ok(await build().range(from,from+999));out=out.concat(data);if(data.length<1000)break;from+=1000}return out}
@@ -18,10 +18,10 @@ const isNet=e=>{const m=String((e&&e.message)||e||'');return !navigator.onLine||
 const isTmp=id=>typeof id=='string'&&id.charAt(0)=='n';
 const newCid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2);
 const tmpId=()=>'n'+newCid();
-function persist(){try{if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,debts:S.debts,pays:S.pays,sales:S.sales,q:S.q,map:S.map}))}catch(e){}}
+function persist(){try{if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,photo:S.photo,debts:S.debts,pays:S.pays,sales:S.sales,q:S.q,map:S.map}))}catch(e){}}
 function enqueue(it){S.q.push(it);persist()}
-function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.owner=c.owner||'';S.phone=c.phone||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};return true}return false}
-function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.owner='';S.phone='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={}}}
+function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.owner=c.owner||'';S.phone=c.phone||'';S.photo=c.photo||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};return true}return false}
+function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.owner='';S.phone='';S.photo='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={}}}
 function banner(){const n=S.q.length;if(!n&&!S.offline)return '';return `<button class="sync" data-act="sync">${n?n+(n==1?' entry is':' entries are')+' saved on this phone and waiting to send. Tap to retry.':'No network. Showing records saved on this phone.'}</button>`}
 function softRender(){const a=document.activeElement;if(a&&a.tagName=='INPUT')return;render()}
 async function insIdem(t,row){const r=await sb.from(t).insert(row).select().single();
@@ -63,12 +63,12 @@ async function sync(){
  if(again&&S.q.length&&!S.offline){return sync()}
  softRender()}
 async function loadAll(){
- const sh=await sb.from('shops').select('name,owner_name,phone').maybeSingle();if(sh.error)throw sh.error;
+ const sh=await sb.from('shops').select('name,owner_name,phone,photo').maybeSingle();if(sh.error)throw sh.error;
  const d=await fetchAll(()=>sb.from('debts').select('*').order('id'));
  const p=await fetchAll(()=>sb.from('payments').select('*').order('id'));
  const sl=await fetchAll(()=>sb.from('sales').select('*').gte('sale_date',off(-730)).order('id'));
  if(S.q.length)return false;
- S.shop=sh.data?sh.data.name:'';S.owner=sh.data?(sh.data.owner_name||''):'';S.phone=sh.data?(sh.data.phone||''):'';S.debts=d;S.pays=p;S.sales=sl;persist();return true}
+ S.shop=sh.data?sh.data.name:'';S.owner=sh.data?(sh.data.owner_name||''):'';S.phone=sh.data?(sh.data.phone||''):'';S.photo=sh.data?(sh.data.photo||''):'';S.debts=d;S.pays=p;S.sales=sl;persist();return true}
 async function loadAllOld(){
  const sh=await sb.from('shops').select('name').maybeSingle();
  S.shop=sh.data?sh.data.name:'';
@@ -158,16 +158,18 @@ function pastCust(){const q=(S.fd||'').trim().toLowerCase();if(!q)return '';
  if(!past.length)return '';
  return '<h2 class="sec">Fully paid customers</h2>'+past.map(x=>`<div class="item"><button class="name linkn" data-act="cust" data-v="${esc(ck(x.customer_name))}">${esc(x.customer_name)} ›</button> <span class="m">Fully paid</span></div>`).join('')}
 function initials(n){const w=String(n||'').trim().split(/\s+/).filter(Boolean);return ((w[0]||'T').charAt(0)+(w[1]?w[1].charAt(0):'')).toUpperCase()}
+const goodPhoto=()=>S.photo&&String(S.photo).indexOf('data:image/')==0;
+function resizeImg(file,cb){const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const n=240,c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d'),m=Math.min(im.width,im.height);x.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,n,n);cb(c.toDataURL('image/jpeg',0.8))};im.onerror=()=>cb(null);im.src=r.result};r.onerror=()=>cb(null);r.readAsDataURL(file)}
 function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening',first=(S.owner||'').trim().split(' ')[0],o=openD(),late=o.filter(x=>dayDiff(x.due_date)<0),owed=o.reduce((a,x)=>a+balOf(x),0);
  let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${g}${first?', '+esc(first):''}</h1></div></div>`;
- h+=`<div class="item"><div class="prof"><div class="avatar">${esc(initials(S.shop||S.owner))}</div><div><div class="name">${esc(S.shop||'My shop')}</div><div class="m">${esc(S.owner||'Add your full name')}</div>${S.phone?`<div class="m">${esc(S.phone)}</div>`:''}<div class="m">${esc((S.user&&S.user.email)||'')}</div></div></div><button class="full alt" data-act="editprof">Edit profile</button></div>`;
+ h+=`<div class="item"><div class="prof"><label class="avatar">${goodPhoto()?`<img src="${esc(S.photo)}" alt="Profile picture">`:esc(initials(S.shop||S.owner))}<input type="file" accept="image/*" data-photo="1" style="display:none"></label><div><div class="name">${esc(S.shop||'My shop')}</div><div class="m">${esc(S.owner||'Add your full name')}</div>${S.phone?`<div class="m">${esc(S.phone)}</div>`:''}<div class="m">${esc((S.user&&S.user.email)||'')}</div><div class="m">Tap the picture to change it</div></div></div><button class="full alt" data-act="editprof">Edit profile</button></div>`;
  h+=`<div class="hero"><small>Sales today</small><div class="big">${naira(sumS(null,t))}</div><div class="row"><span>Cash ${naira(sumS('Cash',t))}</span><span>Transfer ${naira(sumS('Transfer',t))}</span><span>Credit ${naira(sumS('Credit',t))}</span></div><div class="row"><span>Collected ${naira(colOf(t))}</span></div></div>`;
  h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Customers owing</span><b>${o.length}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
  h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button>`;
  if(late.length)h+=`<button class="full" style="background:var(--wa);color:#06260f" data-act="rall">Remind overdue (${late.length})</button>`;
  h+=`<button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
  return h}
-function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}"><button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
+function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}">${goodPhoto()?'<button class="full alt" data-act="rmphoto">Remove photo</button>':''}<button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
 const dueFilter=x=>{const k=dayDiff(x.due_date);return S.ff=='late'?k<0:S.ff=='soon'?(k>=0&&k<=7):true};
 function chipsBar(){const l=openD().filter(x=>dayDiff(x.due_date)<0).length,sn=openD().filter(x=>{const k=dayDiff(x.due_date);return k>=0&&k<=7}).length;
  let h='<div class="chips" style="margin-top:12px">'+[['all','All'],['late','Overdue ('+l+')'],['soon','Due soon ('+sn+')']].map(c=>`<button class="chip" data-act="ff" data-v="${c[0]}" aria-pressed="${S.ff==c[0]}">${c[1]}</button>`).join('')+'</div>';
@@ -276,6 +278,7 @@ async function act(a,v){
  else if(a=='editprof'){S.d.po=S.owner;S.d.ps=S.shop;S.d.pp=S.phone;S.sheet='profile';render()}
  else if(a=='saveprof'){const o=(S.d.po||'').trim(),sh=(S.d.ps||'').trim(),ph=(S.d.pp||'').trim();if(!sh){toast('Add your shop name');return}
   S.owner=o;S.shop=sh;S.phone=ph;enqueue({k:'prof',row:{name:sh,owner_name:o||null,phone:ph||null}});S.sheet=null;render();toast('Profile saved');sync()}
+ else if(a=='rmphoto'){S.photo='';enqueue({k:'prof',row:{photo:null}});S.sheet=null;render();toast('Photo removed');sync()}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
  else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();window.open('https://wa.me/'+waNum(x.phone)+'?text='+encodeURIComponent(msg),'_blank')}
@@ -303,6 +306,8 @@ document.addEventListener('input',e=>{const t=e.target,k=t.dataset.d,sk=t.datase
  if(k){S.d[k]=t.value;if(k=='pn'||k=='amount'){const b=$('bal');if(b)b.textContent=balText()}}
  else if(sk){S[sk]=t.value;const el=$(sk=='fd'?'dlist':'slist');if(el)el.innerHTML=sk=='fd'?debtsAll():salesList()}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.day&&t.value){S.day=t.value==off(0)?null:t.value;render()}});
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset.photo||!t.files||!t.files[0])return;const f=t.files[0];
+ resizeImg(f,d=>{if(!d){toast('Could not use that picture. Try another.');return}S.photo=d;enqueue({k:'prof',row:{photo:d}});render();toast('Picture saved');sync()})});
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]');if(!b||S.busy)return;S.busy=true;
  try{await act(b.dataset.act,b.dataset.v)}catch(err){console.error(err);toast(/fetch|network/i.test(err.message||'')?'No network. Try again.':(err.message||'Something went wrong').slice(0,60))}
  S.busy=false});
