@@ -31,14 +31,15 @@ async function insIdem(t,row){const r=await sb.from(t).insert(row).select().sing
 async function runItem(it){const R=id=>S.map[id]||id;
  if(it.k=='debt'){const r=await insIdem('debts',{...it.row,cid:it.cid,...AT(it)});S.map[it.tmp]=r.id}
  else if(it.k=='sale'){const r=await insIdem('sales',{...it.row,cid:it.cid,...AT(it)});S.map[it.tmp]=r.id}
- else if(it.k=='pay'){await insIdem('payments',{debt_id:R(it.debt),amount:it.row.amount,cid:it.cid,...AT(it)})}
+ else if(it.k=='pay'){S.map[it.tmp]=(await insIdem('payments',{debt_id:R(it.debt),amount:it.row.amount,cid:it.cid,...AT(it)})).id}
  else if(it.k=='upd'){ok(await sb.from('debts').update(it.row).eq('id',R(it.debt)))}
  else if(it.k=='del'){ok(await sb.from('debts').delete().eq('id',R(it.debt)))}
  else if(it.k=='delsale'){ok(await sb.from('sales').delete().eq('id',R(it.id)))}
  else if(it.k=='prof'){ok(await sb.from('shops').upsert({user_id:S.uid,...it.row}))}
  else if(it.k=='exp'){const r=await insIdem('expenses',{...it.row,cid:it.cid,...AT(it)});S.map[it.tmp]=r.id}
  else if(it.k=='delexp'){ok(await sb.from('expenses').delete().eq('id',R(it.id)))}
- else if(it.k=='updsale'){ok(await sb.from('sales').update(it.row).eq('id',R(it.id)))}}
+ else if(it.k=='updsale'){ok(await sb.from('sales').update(it.row).eq('id',R(it.id)))}
+ else if(it.k=='delpay'){ok(await sb.from('payments').delete().eq('id',R(it.id)))}}
 async function sync(){
  if(!S.user)return;
  if(S.syncing){S.again=true;return}
@@ -116,7 +117,7 @@ const colOf=d=>S.pays.filter(p=>payDay(p)==d).reduce((t,p)=>t+Number(p.amount),0
 function balText(){const am=Number(S.d.amount)||0,pn=Number(S.d.pn)||0;if(!(am>0))return '';if(pn>=am&&pn>0)return 'Paid now must be less than the total price';return 'Customer will owe '+naira(am-(pn>0?pn:0))}
 function collectedHtml(d){const ps=S.pays.filter(p=>payDay(p)==d).slice().reverse();
  if(!ps.length)return '<div class="empty">No debts collected '+(d==off(0)?'today':'on this day')+'.</div>';
- return ps.map(p=>{const x=debtOf(p.debt_id);return `<div class="item"><div class="l1">${x?`<button class="name linkn" data-act="cust" data-v="${esc(ck(x.customer_name))}">${esc(x.customer_name)} ›</button>`:'<span class="name">Customer</span>'}<span class="amt">${naira(p.amount)}</span></div><div class="m">${fmtT(p.created_at)}${x&&balOf(x)>0?' · still owes '+naira(balOf(x)):' · fully paid'}</div></div>`}).join('')}
+ return ps.map(p=>{const x=debtOf(p.debt_id);return `<div class="item"><div class="l1">${x?`<button class="name linkn" data-act="cust" data-v="${esc(ck(x.customer_name))}">${esc(x.customer_name)} ›</button>`:'<span class="name">Customer</span>'}<span class="amt">${naira(p.amount)}</span></div><div class="m">${fmtT(p.created_at)}${x&&balOf(x)>0?' · still owes '+naira(balOf(x)):' · fully paid'}</div><div class="l1"><span></span><button class="del" data-act="delpay" data-v="${p.id}">Remove</button></div></div>`}).join('')}
 function debtsList(){const q=(S.fd||'').trim().toLowerCase(),qd=q.replace(/\D/g,'');
  const list=openD().filter(dueFilter).filter(x=>!q||String(x.customer_name).toLowerCase().includes(q)||(qd.length>2&&String(x.phone||'').replace(/\D/g,'').includes(qd)));
  let h='';
@@ -352,7 +353,7 @@ async function act(a,v){
  else if(a=='cust'){S.cust=v;S.sheet='cust';render()}
  else if(a=='pay'){const x=S.debts.find(z=>z.id==v);S.remId=v;S.d.pa=String(balOf(x));S.sheet='pay';render()}
  else if(a=='savepay'){const x=S.debts.find(z=>z.id==S.remId),am=Number(S.d.pa),b=balOf(x);if(!(am>0)){toast('Enter the amount paid');return}if(am>b){toast('That is more than the '+naira(b)+' owed');return}
-  S.pays.push({id:tmpId(),debt_id:x.id,amount:am,created_at:new Date().toISOString()});enqueue({k:'pay',cid:newCid(),debt:x.id,row:{amount:am}});
+  const ptmp=tmpId();S.pays.push({id:ptmp,debt_id:x.id,amount:am,created_at:new Date().toISOString()});enqueue({k:'pay',cid:newCid(),tmp:ptmp,debt:x.id,row:{amount:am}});
   if(am>=b){x.paid=true;x.paid_at=new Date().toISOString();enqueue({k:'upd',debt:x.id,row:{paid:true,paid_at:x.paid_at}})}
   S.rc={text:payReceipt(x,am,Math.max(0,b-am))};S.d.rcp=x.phone||'';S.sheet='rcpt';render();toast(am>=b?'Fully paid':'Payment saved');sync()}
  else if(a=='edit'){const x=S.debts.find(z=>z.id==v);S.remId=v;S.d.en=x.customer_name;S.d.ep=x.phone||'';S.d.ea=String(x.amount);S.d.ed=x.due_date;S.sheet='edit';render()}
@@ -411,6 +412,12 @@ async function act(a,v){
  else if(a=='dper'){S.doc.per=v;render()}
  else if(a=='print'){window.print()}
  else if(a=='docsv'){const d=docData(S.doc.type,S.doc.per),top=[[S.shop||'My shop'],[[S.owner,S.phone].filter(Boolean).join(' · ')],[d.title],[d.plabel],['Generated: '+d.gen],[]];downloadCsv('tradelog-'+S.doc.type+'-'+off(0)+'.csv',top.concat([d.head]).concat(d.rows).concat([[]]).concat(d.sum.map(x=>[x[0],x[1]])));toast('Spreadsheet saved. Check your Downloads.')}
+ else if(a=='delpay'){const p=S.pays.find(z=>z.id==v);if(!p)return;const x=debtOf(p.debt_id);
+  if(!confirm('Remove this payment of '+naira(p.amount)+(x?' from '+x.customer_name:'')+'?'+(x?' Their balance will go back up.':'')))return;
+  S.pays=S.pays.filter(z=>z.id!=v);
+  if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delpay',id:v});
+  if(x&&x.paid&&balOf(x)>0){x.paid=false;x.paid_at=null;enqueue({k:'upd',debt:x.id,row:{paid:false,paid_at:null}})}
+  persist();render();toast('Payment removed');sync()}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
  else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();window.open('https://wa.me/'+waNum(x.phone)+'?text='+encodeURIComponent(msg),'_blank')}
