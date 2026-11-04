@@ -10,7 +10,7 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const waNum=s=>{const d=String(s||'').replace(/\D/g,'');if(d.indexOf('234')==0)return d;if(d[0]=='0')return '234'+d.slice(1);if(d.length==10)return '234'+d;return d};
 const fmtD=s=>new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 const fmtK=n=>n>=1000?Math.round(n/1000)+'k':String(n);
-const S={user:null,shop:'',owner:'',phone:'',photo:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,day:null,fd:'',fs:'',ff:'all',sent:{},tab:0,sheet:null,mode:'start',show:false,busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
+const S={user:null,shop:'',owner:'',phone:'',photo:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,day:null,fd:'',fs:'',ff:'all',sent:{},ex:[],tab:0,sheet:null,mode:'start',show:false,busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2200)}
 function ok(r){if(r.error)throw r.error;return r.data}
 async function fetchAll(build){let out=[],from=0;for(;;){const data=ok(await build().range(from,from+999));out=out.concat(data);if(data.length<1000)break;from+=1000}return out}
@@ -18,10 +18,10 @@ const isNet=e=>{const m=String((e&&e.message)||e||'');return !navigator.onLine||
 const isTmp=id=>typeof id=='string'&&id.charAt(0)=='n';
 const newCid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2);
 const tmpId=()=>'n'+newCid();
-function persist(){try{if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,photo:S.photo,debts:S.debts,pays:S.pays,sales:S.sales,q:S.q,map:S.map}))}catch(e){}}
+function persist(){try{if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,photo:S.photo,debts:S.debts,pays:S.pays,sales:S.sales,ex:S.ex,q:S.q,map:S.map}))}catch(e){}}
 function enqueue(it){S.q.push(it);persist()}
-function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.owner=c.owner||'';S.phone=c.phone||'';S.photo=c.photo||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};return true}return false}
-function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.owner='';S.phone='';S.photo='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={}}}
+function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.owner=c.owner||'';S.phone=c.phone||'';S.photo=c.photo||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};S.ex=c.ex||[];return true}return false}
+function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.owner='';S.phone='';S.photo='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.ex=[]}}
 function banner(){const n=S.q.length;if(!n&&!S.offline)return '';return `<button class="sync" data-act="sync">${n?n+(n==1?' entry is':' entries are')+' saved on this phone and waiting to send. Tap to retry.':'No network. Showing records saved on this phone.'}</button>`}
 function softRender(){const a=document.activeElement;if(a&&a.tagName=='INPUT')return;render()}
 async function insIdem(t,row){const r=await sb.from(t).insert(row).select().single();
@@ -34,7 +34,10 @@ async function runItem(it){const R=id=>S.map[id]||id;
  else if(it.k=='upd'){ok(await sb.from('debts').update(it.row).eq('id',R(it.debt)))}
  else if(it.k=='del'){ok(await sb.from('debts').delete().eq('id',R(it.debt)))}
  else if(it.k=='delsale'){ok(await sb.from('sales').delete().eq('id',R(it.id)))}
- else if(it.k=='prof'){ok(await sb.from('shops').upsert({user_id:S.uid,...it.row}))}}
+ else if(it.k=='prof'){ok(await sb.from('shops').upsert({user_id:S.uid,...it.row}))}
+ else if(it.k=='exp'){const r=await insIdem('expenses',{...it.row,cid:it.cid});S.map[it.tmp]=r.id}
+ else if(it.k=='delexp'){ok(await sb.from('expenses').delete().eq('id',R(it.id)))}
+ else if(it.k=='updsale'){ok(await sb.from('sales').update(it.row).eq('id',R(it.id)))}}
 async function sync(){
  if(!S.user)return;
  if(S.syncing){S.again=true;return}
@@ -67,8 +70,9 @@ async function loadAll(){
  const d=await fetchAll(()=>sb.from('debts').select('*').order('id'));
  const p=await fetchAll(()=>sb.from('payments').select('*').order('id'));
  const sl=await fetchAll(()=>sb.from('sales').select('*').gte('sale_date',off(-730)).order('id'));
+ const e=await fetchAll(()=>sb.from('expenses').select('*').gte('expense_date',off(-730)).order('id'));
  if(S.q.length)return false;
- S.shop=sh.data?sh.data.name:'';S.owner=sh.data?(sh.data.owner_name||''):'';S.phone=sh.data?(sh.data.phone||''):'';S.photo=sh.data?(sh.data.photo||''):'';S.debts=d;S.pays=p;S.sales=sl;persist();return true}
+ S.shop=sh.data?sh.data.name:'';S.owner=sh.data?(sh.data.owner_name||''):'';S.phone=sh.data?(sh.data.phone||''):'';S.photo=sh.data?(sh.data.photo||''):'';S.debts=d;S.pays=p;S.sales=sl;S.ex=e;persist();return true}
 async function loadAllOld(){
  const sh=await sb.from('shops').select('name').maybeSingle();
  S.shop=sh.data?sh.data.name:'';
@@ -125,7 +129,7 @@ function debtsView(){const list=openD(),total=list.reduce((s,x)=>s+balOf(x),0),l
  h+=`${chipsBar()}<div id="dlist">${debtsAll()}</div>`;
  return h+'<button class="fab" data-act="adddebt">+ Add debt</button>'}
 function salesList(){const q=(S.fs||'').trim().toLowerCase(),d=dayOf();let h='';
- const row=(s,sd)=>`<div class="item"><div class="l1"><span class="name">${esc(s.item)}</span><span class="amt">${naira(s.amount)}</span></div><div class="l1"><span class="m">${sd?dayLabel(s.sale_date)+' · ':''}${s.method}${s.method=='Credit'?' (added to debts)':''}</span><button class="del" data-act="delsale" data-v="${s.id}">Remove</button></div></div>`;
+ const row=(s,sd)=>`<div class="item"><div class="l1"><span class="name">${esc(s.item)}</span><span class="amt">${naira(s.amount)}</span></div><div class="l1"><span class="m">${sd?dayLabel(s.sale_date)+' · ':''}${s.method}${s.method=='Credit'?' (added to debts)':''}</span><span style="white-space:nowrap">${s.method!='Credit'?`<button class="del" data-act="editsale" data-v="${s.id}">Edit</button>`:''}<button class="del" data-act="rcpt" data-v="${s.id}">Receipt</button><button class="del" data-act="delsale" data-v="${s.id}">Remove</button></span></div></div>`;
  if(q){const r=S.sales.filter(s=>String(s.item).toLowerCase().includes(q)).reverse().sort((a,b)=>a.sale_date<b.sale_date?1:a.sale_date>b.sale_date?-1:0);
   h+=`<h2 class="sec">Search results (${r.length})</h2>`;
   if(!r.length)h+=`<div class="empty">No sale found for “${esc(S.fs)}”.</div>`;
@@ -147,14 +151,14 @@ function salesView(){const d=dayOf(),m=S.d.method||'Cash',pm=S.d.pm||'Cash',isT=
  h+=`<div id="slist">${salesList()}</div>`;
  return h}
 function tonightView(){const t=off(0),owed=openD().reduce((s,x)=>s+balOf(x),0);
- return `<div class="top"><div><h1>Tonight’s summary</h1><div class="shop">Your numbers for today</div></div></div><div class="sum"><p><b>Good evening, ${esc(S.shop||'trader')}.</b></p><div class="r"><span>Sales today</span><b>${naira(sumS(null,t))}</b></div><div class="r"><span>Paid in cash</span><b>${naira(sumS('Cash',t))}</b></div><div class="r"><span>Paid by transfer</span><b>${naira(sumS('Transfer',t))}</b></div><div class="r"><span>New debts (credit sales)</span><b>${naira(sumS('Credit',t))}</b></div><div class="r"><span>Debts collected</span><b>${naira(colOf(t))}</b></div><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div></div><button class="full" style="background:var(--wa);color:#06260f" data-act="share" data-v="${t}">Share summary on WhatsApp</button><h2 class="sec">Debts collected today</h2>${collectedHtml(t)}`}
+ return `<div class="top"><div><h1>Tonight’s summary</h1><div class="shop">Your numbers for today</div></div></div><div class="sum"><p><b>Good evening, ${esc(S.shop||'trader')}.</b></p><div class="r"><span>Sales today</span><b>${naira(sumS(null,t))}</b></div><div class="r"><span>Paid in cash</span><b>${naira(sumS('Cash',t))}</b></div><div class="r"><span>Paid by transfer</span><b>${naira(sumS('Transfer',t))}</b></div><div class="r"><span>New debts (credit sales)</span><b>${naira(sumS('Credit',t))}</b></div><div class="r"><span>Debts collected</span><b>${naira(colOf(t))}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today (sales − spent)</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div></div><button class="full" style="background:var(--wa);color:#06260f" data-act="share" data-v="${t}">Share summary on WhatsApp</button><h2 class="sec">Debts collected today</h2>${collectedHtml(t)}`}
 function reportsView(){const m={};S.sales.forEach(s=>{(m[s.sale_date]=m[s.sale_date]||{date:s.sale_date,Cash:0,Transfer:0,Credit:0})[s.method]+=Number(s.amount)});
  const days=Object.values(m),tot=x=>x.Cash+x.Transfer+x.Credit,t0=off(0);
  const dd=bucketsFor(S.rp).map(b=>{const r=days.filter(x=>x.date>=b.from&&x.date<=b.to&&x.date<=t0);return{b,r,t:r.reduce((s,x)=>s+tot(x),0)}});
  const mx=Math.max(...dd.map(x=>x.t))||1,cur=dd[Math.min(S.rsel,dd.length-1)],sm=k=>cur.r.reduce((s,x)=>s+x[k],0),best=cur.r.reduce((a,x)=>!a||tot(x)>tot(a)?x:a,null);
  let h='<div class="top"><div><h1>Sales reports</h1><div class="shop">Daily, weekly and monthly totals</div></div></div><div class="chips">'+[['day','Daily'],['week','Weekly'],['month','Monthly']].map(p=>`<button class="chip" data-act="rp" data-v="${p[0]}" aria-pressed="${S.rp==p[0]}">${p[1]}</button>`).join('')+'</div>';
  h+='<div class="bars">'+dd.slice().reverse().map(x=>{const i=dd.indexOf(x);return `<button class="bar1" data-act="rb" data-v="${i}" aria-pressed="${i==S.rsel}"><span>${fmtK(x.t)}</span><i style="height:${Math.max(4,Math.round(x.t/mx*100))}px"></i><span>${x.b.label}</span></button>`}).join('')+'</div>';
- h+=`<div class="sum"><p><b>${cur.b.label}</b>${S.rp!='day'?` <span class="m">${fmtD(cur.b.from)} to ${fmtD(cur.b.to)}</span>`:''}</p><div class="r"><span>Total sales</span><b>${naira(cur.t)}</b></div><div class="r"><span>Cash</span><b>${naira(sm('Cash'))}</b></div><div class="r"><span>Transfer</span><b>${naira(sm('Transfer'))}</b></div><div class="r"><span>Credit (new debts)</span><b>${naira(sm('Credit'))}</b></div>`+(cur.r.length>1?`<div class="r"><span>Average per selling day</span><b>${naira(Math.round(cur.t/cur.r.length))}</b></div><div class="r"><span>Best day</span><b>${fmtD(best.date)}, ${naira(tot(best))}</b></div>`:'')+'</div>';
+ h+=`<div class="sum"><p><b>${cur.b.label}</b>${S.rp!='day'?` <span class="m">${fmtD(cur.b.from)} to ${fmtD(cur.b.to)}</span>`:''}</p><div class="r"><span>Total sales</span><b>${naira(cur.t)}</b></div><div class="r"><span>Cash</span><b>${naira(sm('Cash'))}</b></div><div class="r"><span>Transfer</span><b>${naira(sm('Transfer'))}</b></div><div class="r"><span>Credit (new debts)</span><b>${naira(sm('Credit'))}</b></div>${profitRows(cur.b)}`+(cur.r.length>1?`<div class="r"><span>Average per selling day</span><b>${naira(Math.round(cur.t/cur.r.length))}</b></div><div class="r"><span>Best day</span><b>${fmtD(best.date)}, ${naira(tot(best))}</b></div>`:'')+'</div>';
  return h+'<p class="m">Tap any bar to see that day, week or month.</p><h2 class="sec">Backup your records</h2><p class="m">Save your records as files that open in Excel or Google Sheets. Sales cover the last 2 years.</p><button class="full alt" data-act="exp" data-v="sales">Download all sales</button><button class="full alt" data-act="exp" data-v="debts">Download all debts</button><button class="full alt" data-act="exp" data-v="pays">Download payments received</button>'}
 const ck=n=>String(n||'').trim().toLowerCase().replace(/\s+/g,' ');
 const fmtY=t=>new Date(t).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
@@ -170,10 +174,10 @@ function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good mornin
  let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${g}${first?', '+esc(first):''}</h1></div></div>`;
  h+=`<div class="item"><div class="prof"><label class="avatar">${goodPhoto()?`<img src="${esc(S.photo)}" alt="Profile picture">`:esc(initials(S.shop||S.owner))}<input type="file" accept="image/*" data-photo="1" style="display:none"></label><div><div class="name">${esc(S.shop||'My shop')}</div><div class="m">${esc(S.owner||'Add your full name')}</div>${S.phone?`<div class="m">${esc(S.phone)}</div>`:''}<div class="m">${esc((S.user&&S.user.email)||'')}</div><div class="m">Tap the picture to change it</div></div></div><button class="full alt" data-act="editprof">Edit profile</button></div>`;
  h+=`<div class="hero"><small>Sales today</small><div class="big">${naira(sumS(null,t))}</div><div class="row"><span>Cash ${naira(sumS('Cash',t))}</span><span>Transfer ${naira(sumS('Transfer',t))}</span><span>Credit ${naira(sumS('Credit',t))}</span></div><div class="row"><span>Collected ${naira(colOf(t))}</span></div></div>`;
- h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Customers owing</span><b>${o.length}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
- h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button>`;
+ h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${o.length}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
+ h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button><button class="full alt" data-act="go" data-v="5">Add an expense</button>`;
  if(late.length)h+=`<button class="full" style="background:var(--wa);color:#06260f" data-act="rall">Remind overdue (${late.length})</button>`;
- h+=`<button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
+ h+=`<h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
  return h}
 function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}">${goodPhoto()?'<button class="full alt" data-act="rmphoto">Remove photo</button>':''}<button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
 const dueFilter=x=>{const k=dayDiff(x.due_date);return S.ff=='late'?k<0:S.ff=='soon'?(k>=0&&k<=7):true};
@@ -217,15 +221,37 @@ function summaryText(d){const L=[];
  L.push('Cash: '+naira(sumS('Cash',d)));
  L.push('Transfer: '+naira(sumS('Transfer',d)));
  L.push('Credit (new debts): '+naira(sumS('Credit',d)));
- L.push('Debts collected: '+naira(colOf(d)));
+ L.push('Debts collected: '+naira(colOf(d)));L.push('Spent: '+naira(expSum(d)));L.push('Profit (sales - spent): '+nm(sumS(null,d)-expSum(d)));
  const ps=S.pays.filter(p=>payDay(p)==d);
  if(ps.length){L.push('');L.push('Paid by:');ps.slice(0,15).forEach(p=>{const x=debtOf(p.debt_id);L.push('- '+(x?x.customer_name:'Customer')+': '+naira(p.amount))});if(ps.length>15)L.push('and '+(ps.length-15)+' more')}
  L.push('');
  L.push('Total owed to you now: '+naira(openD().reduce((t,x)=>t+balOf(x),0)));
  L.push('Sent from TradeLog NG');
  return L.join('\n')}
+const nm=n=>n<0?'-'+naira(-n):naira(n);
+const expSum=d=>S.ex.filter(e=>e.expense_date==d).reduce((t,e)=>t+Number(e.amount),0);
+function saleReceipt(s){const cr=s.method=='Credit';return ['*'+(S.shop||'My shop')+'*','Receipt, '+fmtY(s.sale_date+'T00:00:00'),'','Item: '+s.item,(cr?'Balance still owed: ':'Amount paid: ')+naira(s.amount),cr?'Please pay the balance by the agreed date.':'Paid by: '+s.method,'','Thank you for your patronage.'].join('\n')}
+function payReceipt(x,am,bal){return ['*'+(S.shop||'My shop')+'*','Payment receipt, '+fmtY(new Date().toISOString()),'','Customer: '+x.customer_name,'Amount received: '+naira(am),bal>0?'Balance still owed: '+naira(bal):'Fully paid. Thank you!','','Thank you for your patronage.'].join('\n')}
+function profitRows(b){const t0=off(0),to=b.to>t0?t0:b.to,inR=x=>x>=b.from&&x<=to;
+ const sl=S.sales.filter(s=>inR(s.sale_date)),sales=sl.reduce((t,s)=>t+Number(s.amount),0),spent=S.ex.filter(e=>inR(e.expense_date)).reduce((t,e)=>t+Number(e.amount),0),col=S.pays.filter(p=>inR(payDay(p))).reduce((t,p)=>t+Number(p.amount),0),got=sl.filter(s=>s.method!='Credit').reduce((t,s)=>t+Number(s.amount),0)+col;
+ return `<div class="r"><span>Spent (expenses)</span><b>${naira(spent)}</b></div><div class="r"><span>Profit (sales − spent)</span><b class="${sales-spent<0?'neg':''}">${nm(sales-spent)}</b></div><div class="r"><span>Money received (cash, transfer, debts collected)</span><b>${naira(got)}</b></div><div class="r"><span>Money left after spending</span><b class="${got-spent<0?'neg':''}">${nm(got-spent)}</b></div>`}
+function expensesView(){const d=dayOf(),isT=d==off(0),c=S.d.xc||'Restock',list=S.ex.filter(e=>e.expense_date==d).slice().reverse();
+ let h='<div class="top"><div><h1>Expenses</h1><div class="shop">'+(isT?'Money you spent today':'Adding to '+dayLabel(d))+'</div></div></div>';
+ h+=`<div class="daybar"><button data-act="dayprev" aria-label="Previous day">‹</button><label class="dpick">📅 <b>${dayLabel(d)}</b><input type="date" data-day="1" max="${off(0)}" value="${d}"></label><button data-act="daynext" aria-label="Next day"${isT?' disabled':''}>›</button></div>`;
+ h+=`<div class="hero"><small>Spent ${isT?'today':'on '+dayLabel(d)}</small><div class="big">${naira(expSum(d))}</div><div class="row"><span>Sales ${naira(sumS(null,d))}</span><span>Profit ${nm(sumS(null,d)-expSum(d))}</span></div></div>`;
+ h+=`<div class="item"><label style="margin-top:0">What did you spend on</label><input data-d="xi" placeholder="e.g. Transport to market" value="${esc(S.d.xi)}"><label>Amount (₦)</label><input data-d="xa" type="number" inputmode="numeric" value="${esc(S.d.xa)}"><label>Type</label><div class="chips wrap">`+['Restock','Transport','Rent','Light/fuel','Staff','Other'].map(x=>`<button class="chip" data-act="xcat" data-v="${x}" aria-pressed="${c==x}">${x}</button>`).join('')+'</div><button class="full" data-act="addexp">Add expense</button></div>';
+ h+=`<h2 class="sec">Expenses (${list.length})</h2>`;
+ if(!list.length)h+='<div class="empty">No expenses '+(isT?'recorded yet today':'on this day')+'.</div>';
+ h+=list.map(e=>`<div class="item"><div class="l1"><span class="name">${esc(e.item)}</span><span class="amt">${naira(e.amount)}</span></div><div class="l1"><span class="m">${esc(e.category||'')}</span><button class="del" data-act="delexp" data-v="${e.id}">Remove</button></div></div>`).join('');
+ return h}
+async function pinHash(p,salt){const b=new TextEncoder().encode(salt+':'+p),h=await crypto.subtle.digest('SHA-256',b);return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,'0')).join('')}
+function getPin(){try{return JSON.parse(localStorage.getItem('tl_pin')||'null')}catch(e){return null}}
+function lockView(){return `<div class="auth" style="text-align:center"><img src="icon-192.png" width="72" height="72" style="border-radius:18px" alt=""><div class="brand" style="margin-top:12px">TradeLog NG</div><h1>Enter your PIN</h1><div class="shop">${esc(S.shop||'')}</div><label>4-digit PIN</label><input data-d="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" style="text-align:center;font-size:24px;letter-spacing:8px" value="${esc(S.d.pin)}"><button class="full" data-act="unlock">Unlock</button><button class="full alt" data-act="lockout">Forgot PIN? Sign out</button></div>`}
 function sheetView(){
  if(S.sheet=='cust')return custSheet();
+ if(S.sheet=='editsale'){const s=S.sales.find(z=>z.id==S.remId);if(!s)return '';const m=S.d.sem||s.method;return `<div class="panel"><h1>Edit sale</h1><label>What was sold</label><input data-d="sei" value="${esc(S.d.sei)}"><label>Amount (₦)</label><input data-d="sea" type="number" inputmode="numeric" value="${esc(S.d.sea)}"><label>Paid by</label><div class="chips">`+['Cash','Transfer'].map(x=>`<button class="chip" data-act="semethod" data-v="${x}" aria-pressed="${m==x}">${x}</button>`).join('')+`</div><label>Date</label><input data-d="sed" type="date" max="${off(0)}" value="${esc(S.d.sed)}"><button class="full" data-act="savesale">Save changes</button><button class="full alt" data-act="close">Cancel</button></div>`}
+ if(S.sheet=='rcpt'&&S.rc)return `<div class="panel"><h1>Send receipt</h1><div class="wa" style="white-space:pre-line">${esc(S.rc.text)}</div><label>Customer WhatsApp number (optional)</label><input data-d="rcp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.rcp)}"><button class="full" style="background:var(--wa);color:#06260f" data-act="sendrc">Send on WhatsApp</button><button class="full alt" data-act="close">Done</button></div>`;
+ if(S.sheet=='pinset')return `<div class="panel"><h1>${getPin()?'Change your PIN':'Set a PIN lock'}</h1><div class="shop">The app will ask for this PIN when you open it.</div><label>New 4-digit PIN</label><input data-d="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" value="${esc(S.d.pin)}"><label>Repeat the PIN</label><input data-d="pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off" value="${esc(S.d.pin2)}"><button class="full" data-act="pinsave">Save PIN</button><button class="full alt" data-act="close">Cancel</button></div>`;
  if(S.sheet=='profile')return profSheet();
  if(S.sheet=='rall')return rallSheet();
  if(S.sheet=='pay'){const x=S.debts.find(z=>z.id==S.remId);if(!x)return '';return `<div class="panel"><h1>Record payment</h1><div class="shop">${esc(x.customer_name)} still owes ${naira(balOf(x))}</div><label>Amount paid (₦)</label><input data-d="pa" type="number" inputmode="numeric" value="${esc(S.d.pa)}"><button class="full" data-act="savepay">Save payment</button><button class="full alt" data-act="close">Cancel</button></div>`}
@@ -236,9 +262,11 @@ function sheetView(){
 function recoveryView(){return `<div class="auth"><div class="brand">TradeLog NG</div><h1>Set a new password</h1>`+pwField('np','New password (6 or more characters)','new-password')+pwField('np2','Verify new password','new-password')+`<button class="full" data-act="newpass">Save new password</button></div>`}
 function render(){
  if(S.recovery){$('app').innerHTML=recoveryView();$('nav').innerHTML='';$('sheet').className='sheet';return}
+ if(S.user&&!S.lockChecked){S.lockChecked=true;const pn=getPin();if(pn&&pn.u==S.user.id)S.locked=true}
+ if(S.user&&S.locked){$('app').innerHTML=lockView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  if(!S.user){$('app').innerHTML=authView();$('nav').innerHTML='';$('sheet').className='sheet';return}
- $('app').innerHTML=banner()+[homeView,debtsView,salesView,tonightView,reportsView][S.tab]();
- $('nav').innerHTML='<div>'+[['Home',0],['Debts',1],['Sales',2],['Tonight',3],['Reports',4]].map(t=>`<button data-act="tab" data-v="${t[1]}" aria-selected="${S.tab==t[1]}">${t[0]}</button>`).join('')+'</div>';
+ $('app').innerHTML=banner()+[homeView,debtsView,salesView,tonightView,reportsView,expensesView][S.tab]();
+ $('nav').innerHTML='<div>'+[['Home',0],['Debts',1],['Sales',2],['Expenses',5],['Tonight',3],['Reports',4]].map(t=>`<button data-act="tab" data-v="${t[1]}" aria-selected="${S.tab==t[1]}">${t[0]}</button>`).join('')+'</div>';
  $('sheet').innerHTML=sheetView();$('sheet').className='sheet'+(S.sheet?' on':'');
 }
 async function reload(){await sync()}
@@ -253,7 +281,7 @@ async function act(a,v){
   if(!r.session){toast('Check your email to confirm, then sign in');S.mode='in';render();return}
   S.user=r.user;switchUser(r.user.id);ok(await sb.from('shops').upsert({user_id:S.user.id,name:(S.d.shop||'').trim()||'My shop',owner_name:(S.d.owner||'').trim()||null}));S.d={method:'Cash'};await reload()}
  else if(a=='sync'){sync();toast('Trying to send...')}
- else if(a=='out'){if(S.q.length&&!confirm(S.q.length+' entries have not been sent yet. Signing out will lose them. Sign out anyway?'))return;try{await sb.auth.signOut({scope:'local'})}catch(e){}S.user=null;S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.uid=null;try{localStorage.removeItem('tl_cache')}catch(e){}S.d={method:'Cash'};S.mode='start';S.show=false;render()}
+ else if(a=='out'){if(S.q.length&&!confirm(S.q.length+' entries have not been sent yet. Signing out will lose them. Sign out anyway?'))return;try{await sb.auth.signOut({scope:'local'})}catch(e){}S.user=null;S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.uid=null;S.ex=[];S.lockChecked=false;S.locked=false;try{localStorage.removeItem('tl_cache');localStorage.removeItem('tl_pin')}catch(e){}S.d={method:'Cash'};S.mode='start';S.show=false;render()}
  else if(a=='tab'){S.tab=Number(v);S.rsel=0;render()}
  else if(a=='rp'){S.rp=v;S.rsel=0;render()}
  else if(a=='rb'){S.rsel=Number(v);render()}
@@ -267,7 +295,7 @@ async function act(a,v){
  else if(a=='savepay'){const x=S.debts.find(z=>z.id==S.remId),am=Number(S.d.pa),b=balOf(x);if(!(am>0)){toast('Enter the amount paid');return}if(am>b){toast('That is more than the '+naira(b)+' owed');return}
   S.pays.push({id:tmpId(),debt_id:x.id,amount:am,created_at:new Date().toISOString()});enqueue({k:'pay',cid:newCid(),debt:x.id,row:{amount:am}});
   if(am>=b){x.paid=true;x.paid_at=new Date().toISOString();enqueue({k:'upd',debt:x.id,row:{paid:true,paid_at:x.paid_at}})}
-  S.sheet=null;render();toast(am>=b?'Fully paid':'Payment saved');sync()}
+  S.rc={text:payReceipt(x,am,Math.max(0,b-am))};S.d.rcp=x.phone||'';S.sheet='rcpt';render();toast(am>=b?'Fully paid':'Payment saved');sync()}
  else if(a=='edit'){const x=S.debts.find(z=>z.id==v);S.remId=v;S.d.en=x.customer_name;S.d.ep=x.phone||'';S.d.ea=String(x.amount);S.d.ed=x.due_date;S.sheet='edit';render()}
  else if(a=='saveedit'){const x=S.debts.find(z=>z.id==S.remId),n=(S.d.en||'').trim(),am=Number(S.d.ea);if(!n||!(am>0)||!S.d.ed){toast('Add name, amount and due date');return}
   if(am<paidOf(x)){toast('Amount cannot be less than the '+naira(paidOf(x))+' already paid');return}
@@ -288,6 +316,38 @@ async function act(a,v){
  else if(a=='saveprof'){const o=(S.d.po||'').trim(),sh=(S.d.ps||'').trim(),ph=(S.d.pp||'').trim();if(!sh){toast('Add your shop name');return}
   S.owner=o;S.shop=sh;S.phone=ph;enqueue({k:'prof',row:{name:sh,owner_name:o||null,phone:ph||null}});S.sheet=null;render();toast('Profile saved');sync()}
  else if(a=='rmphoto'){S.photo='';enqueue({k:'prof',row:{photo:null}});S.sheet=null;render();toast('Photo removed');sync()}
+ else if(a=='xcat'){S.d.xc=v;render()}
+ else if(a=='addexp'){const it=(S.d.xi||'').trim(),am=Number(S.d.xa),c=S.d.xc||'Restock',day=dayOf();
+  if(!it||!(am>0)){toast('Add what you spent on and the amount');return}
+  const tmp=tmpId(),row={item:it,category:c,amount:am,expense_date:day};
+  S.ex.push({id:tmp,...row,created_at:new Date().toISOString()});enqueue({k:'exp',cid:newCid(),tmp,row});
+  S.d.xi='';S.d.xa='';render();toast('Expense saved');sync()}
+ else if(a=='delexp'){S.ex=S.ex.filter(e=>e.id!=v);if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delexp',id:v});persist();render();toast('Expense removed');sync()}
+ else if(a=='editsale'){const s=S.sales.find(z=>z.id==v);if(!s)return;S.remId=v;S.d.sei=s.item;S.d.sea=String(s.amount);S.d.sed=s.sale_date;S.d.sem=s.method;S.sheet='editsale';render()}
+ else if(a=='semethod'){S.d.sem=v;render()}
+ else if(a=='savesale'){const s=S.sales.find(z=>z.id==S.remId);if(!s){S.sheet=null;render();return}
+  const it=(S.d.sei||'').trim(),am=Number(S.d.sea),dt=S.d.sed,m=S.d.sem||s.method;
+  if(!it||!(am>0)||!dt){toast('Add the item, amount and date');return}
+  if(dt>off(0)){toast('The date cannot be in the future');return}
+  const row={item:it,amount:am,method:m,sale_date:dt};Object.assign(s,row);
+  const qi=S.q.find(i=>i.k=='sale'&&i.tmp==s.id);if(qi){Object.assign(qi.row,row);persist()}else enqueue({k:'updsale',id:s.id,row});
+  S.sheet=null;render();toast('Sale updated');sync()}
+ else if(a=='rcpt'){const s=S.sales.find(z=>z.id==v);if(!s)return;S.rc={text:saleReceipt(s)};S.d.rcp='';S.sheet='rcpt';render()}
+ else if(a=='sendrc'){const n=waNum(S.d.rcp);window.open('https://wa.me/'+(n.length==13?n:'')+'?text='+encodeURIComponent((S.rc&&S.rc.text)||''),'_blank')}
+ else if(a=='pinset'){S.d.pin='';S.d.pin2='';S.sheet='pinset';render()}
+ else if(a=='pinsave'){const p=S.d.pin||'';if(!/^\d{4}$/.test(p)){toast('Use exactly 4 digits');return}if(p!==(S.d.pin2||'')){toast('The two PINs do not match');return}
+  const salt=newCid(),h=await pinHash(p,salt);localStorage.setItem('tl_pin',JSON.stringify({s:salt,h:h,u:(S.user&&S.user.id)||S.uid}));S.d.pin='';S.d.pin2='';S.sheet=null;render();toast('PIN lock is on')}
+ else if(a=='pinoff'){if(!confirm('Turn off the PIN lock?'))return;try{localStorage.removeItem('tl_pin')}catch(e){}render();toast('PIN lock is off')}
+ else if(a=='unlock'){const pn=getPin();if(!pn){S.locked=false;render();return}
+  if(Date.now()<(S.lockUntil||0)){toast('Too many wrong tries. Wait a little.');return}
+  const h=await pinHash(S.d.pin||'',pn.s);
+  if(h===pn.h){S.locked=false;S.d.pin='';S.tries=0;render()}
+  else{S.tries=(S.tries||0)+1;S.d.pin='';if(S.tries>=5){S.lockUntil=Date.now()+30000;S.tries=0;toast('Too many wrong tries. Wait 30 seconds.')}else toast('Wrong PIN');render()}}
+ else if(a=='lockout'){if(S.q.length&&!confirm(S.q.length+' entries have not been sent yet. Signing out will lose them. Sign out anyway?'))return;
+  try{await sb.auth.signOut({scope:'local'})}catch(e){}
+  S.locked=false;S.lockChecked=false;S.user=null;S.debts=[];S.pays=[];S.sales=[];S.ex=[];S.q=[];S.map={};S.uid=null;
+  try{localStorage.removeItem('tl_cache');localStorage.removeItem('tl_pin')}catch(e){}
+  S.d={method:'Cash'};S.mode='start';S.show=false;render()}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
  else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();window.open('https://wa.me/'+waNum(x.phone)+'?text='+encodeURIComponent(msg),'_blank')}
@@ -322,6 +382,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]
  S.busy=false});
 sb.auth.onAuthStateChange(ev=>{if(ev=='PASSWORD_RECOVERY'){S.recovery=true;render()}});
 if(/type=recovery/.test(location.hash))S.recovery=true;
+document.addEventListener('visibilitychange',()=>{if(document.hidden){S.hiddenAt=Date.now()}else if(S.user&&getPin()&&S.hiddenAt&&Date.now()-S.hiddenAt>60000){S.locked=true;S.d.pin='';render()}});
 window.addEventListener('online',()=>sync());
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
 setInterval(()=>{if(S.user&&(S.q.length||S.offline))sync()},30000);

@@ -62,3 +62,7 @@ input{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-r
 .pw{position:relative}
 .pw input{padding-right:50px}
 .eye{position:absolute;right:2px;top:50%;transform:translateY(-50%);background:none;color:var(--mute);padding:10px;width:auto;display:flex}
+nav button{font-size:13px;padding:16px 0}
+.chips.wrap{flex-wrap:wrap}
+.chips.wrap .chip{flex:1 1 30%}
+.neg{color:var(--red)}
