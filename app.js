@@ -85,7 +85,7 @@ async function loadAllOld(){
 const sumS=(m,date)=>S.sales.filter(s=>s.sale_date==(date||off(0))&&(!m||s.method==m)).reduce((t,s)=>t+Number(s.amount),0);
 const paidOf=x=>S.pays.filter(p=>p.debt_id==x.id).reduce((t,p)=>t+Number(p.amount),0);
 const balOf=x=>Math.max(0,Number(x.amount)-paidOf(x));
-const openD=()=>S.debts.filter(x=>!x.paid).sort((a,b)=>a.due_date<b.due_date?-1:1);
+const openD=()=>S.debts.filter(x=>!x.paid&&balOf(x)>0).sort((a,b)=>a.due_date<b.due_date?-1:1);
 function tagFor(x){const k=dayDiff(x.due_date);
  if(k<0)return['late',-k+(k==-1?' day late':' days late')];
  if(k==0)return['soon','Due today'];
@@ -126,7 +126,7 @@ function debtsList(){const q=(S.fd||'').trim().toLowerCase(),qd=q.replace(/\D/g,
  return h}
 function debtsView(){const list=openD(),total=list.reduce((s,x)=>s+balOf(x),0),late=list.filter(x=>dayDiff(x.due_date)<0).reduce((s,x)=>s+balOf(x),0);
  let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${esc(S.shop||'My shop')}</h1></div></div>`;
- h+=`<div class="hero"><small>Total owed to you</small><div class="big">${naira(total)}</div><div class="row"><span>${list.length} customers</span><span>${naira(late)} overdue</span></div></div>`;
+ h+=`<div class="hero"><small>Total owed to you</small><div class="big">${naira(total)}</div><div class="row"><span>${new Set(list.map(x=>ck(x.customer_name))).size} customers</span><span>${naira(late)} overdue</span></div></div>`;
  h+=`<input class="search" data-s="fd" type="search" placeholder="Search customer name or number" value="${esc(S.fd)}">`;
  h+=`${chipsBar()}<div id="dlist">${debtsAll()}</div>`;
  return h+'<button class="fab" data-act="adddebt">+ Add debt</button>'}
@@ -176,7 +176,7 @@ function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good mornin
  let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${g}${first?', '+esc(first):''}</h1></div></div>`;
  h+=`<div class="item"><div class="prof"><label class="avatar">${goodPhoto()?`<img src="${esc(S.photo)}" alt="Profile picture">`:esc(initials(S.shop||S.owner))}<input type="file" accept="image/*" data-photo="1" style="display:none"></label><div><div class="name">${esc(S.shop||'My shop')}</div><div class="m">${esc(S.owner||'Add your full name')}</div>${S.phone?`<div class="m">${esc(S.phone)}</div>`:''}<div class="m">${esc((S.user&&S.user.email)||'')}</div><div class="m">Tap the picture to change it</div></div></div><button class="full alt" data-act="editprof">Edit profile</button></div>`;
  h+=`<div class="hero"><small>Sales today</small><div class="big">${naira(sumS(null,t))}</div><div class="row"><span>Cash ${naira(sumS('Cash',t))}</span><span>Transfer ${naira(sumS('Transfer',t))}</span><span>Credit ${naira(sumS('Credit',t))}</span></div><div class="row"><span>Collected ${naira(colOf(t))}</span></div></div>`;
- h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${o.length}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
+ h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${new Set(o.map(x=>ck(x.customer_name))).size}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
  h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button><button class="full alt" data-act="go" data-v="5">Add an expense</button>`;
  if(late.length)h+=`<button class="full" style="background:var(--wa);color:#06260f" data-act="rall">Remind overdue (${late.length})</button>`;
  h+=`<h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
