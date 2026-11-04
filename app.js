@@ -100,13 +100,14 @@ const eyeOn='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke=
 const eyeOff='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 function pwField(key,label,ac){return `<label>${label}</label><div class="pw"><input data-d="${key}" type="${S.show?'text':'password'}" autocomplete="${ac}" value="${esc(S.d[key])}"><button type="button" class="eye" data-act="eye" aria-label="Show or hide password">${S.show?eyeOff:eyeOn}</button></div>`}
 function authView(){const m=S.mode;
- if(m=='start')return `<div class="auth" style="text-align:center"><img src="icon-192.png" width="88" height="88" style="border-radius:22px" alt=""><div class="brand" style="margin-top:14px">TradeLog NG</div><h1>Record sales. Track debts.</h1><div class="shop">Your shop records, safe on your phone</div><button class="full" data-act="mode" data-v="in">Log in</button><button class="full alt" data-act="mode" data-v="up">Create account</button></div>`;
+ if(m=='start')return `<div class="auth" style="text-align:center"><img src="icon-192.png" width="88" height="88" style="border-radius:22px" alt=""><div class="brand" style="margin-top:14px">TradeLog NG</div><h1>Record sales. Track debts.</h1><div class="shop">Your shop records, safe on your phone</div><button class="full" data-act="mode" data-v="in">Log in</button><button class="full alt" data-act="mode" data-v="up">Create account</button><p class="m" style="margin-top:18px"><a href="privacy.html" target="_blank" style="color:var(--green)">Terms and Privacy Policy</a></p></div>`;
  const up=m=='up';
  return `<div class="auth"><button class="del" data-act="mode" data-v="start" style="padding-left:0">‹ Back</button><div class="brand">TradeLog NG</div><h1>${up?'Create your account':'Welcome back'}</h1><div class="shop">${up?'It takes about a minute':'Log in to see your records'}</div>`+
  (up?`<label>Your full name</label><input data-d="owner" placeholder="Chidi Okafor" autocomplete="name" value="${esc(S.d.owner)}"><label>Shop name</label><input data-d="shop" placeholder="Mama Chidi Provisions" value="${esc(S.d.shop)}">`:'')+
  `<label>Email</label><input data-d="email" type="email" autocomplete="email" value="${esc(S.d.email)}">`+
  pwField('password',up?'Password (6 or more characters)':'Password',up?'new-password':'current-password')+
  (up?pwField('password2','Verify your password','new-password'):'')+
+ (up?`<label style="display:flex;gap:10px;align-items:flex-start;color:var(--ink);font-size:14px;margin-top:16px"><input type="checkbox" data-d="agree" style="width:22px;height:22px;flex:none;margin-top:2px" ${S.d.agree?'checked':''}><span>I agree to the <a href="privacy.html" target="_blank" style="color:var(--green)">Terms and Privacy Policy</a></span></label>`:'')+
  `<button class="full" data-act="${up?'signup':'signin'}">${up?'Create account':'Log in'}</button>`+
  (up?`<button class="full alt" data-act="mode" data-v="in">I already have an account</button>`:`<button class="full alt" data-act="forgot">Forgot password?</button><button class="full alt" data-act="mode" data-v="up">Create a new account</button>`)+'</div>'}
 function dayOf(){return S.day||off(0)}
@@ -179,7 +180,7 @@ function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good mornin
  h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${new Set(o.map(x=>ck(x.customer_name))).size}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
  h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button><button class="full alt" data-act="go" data-v="5">Add an expense</button>`;
  if(late.length)h+=`<button class="full" style="background:var(--wa);color:#06260f" data-act="rall">Remind overdue (${late.length})</button>`;
- h+=`<h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="color:var(--red)" data-act="wipe">Clear all my records</button><button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
+ h+=`<h2 class="sec">About</h2><a class="full alt" style="display:block;text-align:center;text-decoration:none;border-radius:10px;font-weight:600" href="privacy.html" target="_blank">Privacy policy and terms</a><h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="color:var(--red)" data-act="wipe">Clear all my records</button><button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
  return h}
 function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}">${goodPhoto()?'<button class="full alt" data-act="rmphoto">Remove photo</button>':''}<button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
 const dueFilter=x=>{const k=dayDiff(x.due_date);return S.ff=='late'?k<0:S.ff=='soon'?(k>=0&&k<=7):true};
@@ -353,7 +354,8 @@ async function act(a,v){
  if(a=='mode'){S.mode=v||(S.mode=='in'?'up':'in');S.show=false;render()}
  else if(a=='eye'){S.show=!S.show;document.querySelectorAll('.pw input').forEach(i=>{i.type=S.show?'text':'password'});document.querySelectorAll('.eye').forEach(b=>{b.innerHTML=S.show?eyeOff:eyeOn})}
  else if(a=='signin'){const r=ok(await sb.auth.signInWithPassword({email:(S.d.email||'').trim(),password:S.d.password||''}));S.user=r.user;switchUser(r.user.id);S.d={method:'Cash'};await reload()}
- else if(a=='signup'){const e=(S.d.email||'').trim(),p=S.d.password||'';if(!(S.d.owner||'').trim()||!(S.d.shop||'').trim()){toast('Add your full name and shop name');return}
+ else if(a=='signup'){const e=(S.d.email||'').trim(),p=S.d.password||'';if(!S.d.agree){toast('Please tick the box to agree to the Terms and Privacy Policy');return}
+  if(!(S.d.owner||'').trim()||!(S.d.shop||'').trim()){toast('Add your full name and shop name');return}
   if(!e||p.length<6){toast('Add your email and a password of 6 or more characters');return}
   if(p!==(S.d.password2||'')){toast('The two passwords do not match');return}
   const r=ok(await sb.auth.signUp({email:e,password:p}));
@@ -474,7 +476,7 @@ async function act(a,v){
  else if(a=='delsale'){S.sales=S.sales.filter(s=>s.id!=v);if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delsale',id:v});persist();render();toast('Sale removed');sync()}
 }
 document.addEventListener('input',e=>{const t=e.target,k=t.dataset.d,sk=t.dataset.s;
- if(k){S.d[k]=t.value;if(k=='pn'||k=='amount'){const b=$('bal');if(b)b.textContent=balText()}}
+ if(k){S.d[k]=t.type=='checkbox'?t.checked:t.value;if(k=='pn'||k=='amount'){const b=$('bal');if(b)b.textContent=balText()}}
  else if(sk){S[sk]=t.value;const el=$(sk=='fd'?'dlist':'slist');if(el)el.innerHTML=sk=='fd'?debtsAll():salesList()}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.day&&t.value){S.day=t.value==off(0)?null:t.value;render()}});
 document.addEventListener('change',e=>{const t=e.target;if(!t.dataset.photo||!t.files||!t.files[0])return;const f=t.files[0];
