@@ -66,3 +66,18 @@ nav button{font-size:13px;padding:16px 0}
 .chips.wrap{flex-wrap:wrap}
 .chips.wrap .chip{flex:1 1 30%}
 .neg{color:var(--red)}
+.docwrap{background:#fff!important;color:#111;max-width:760px;max-height:94vh}
+.docwrap h1{font-size:18px;margin:6px 0 2px;color:#111}
+.dshop{font-weight:800;font-size:17px;color:#0b6b3a}
+.dm{color:#555;font-size:12px;margin:2px 0}
+.docwrap table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+.docwrap th,.docwrap td{border:1px solid #cfd8d2;padding:5px 6px;text-align:left;vertical-align:top;color:#111}
+.docwrap th{background:#e1f2e7}
+.docwrap .n{text-align:right;white-space:nowrap}
+.sumt{max-width:420px;margin-left:auto}
+.sumt .tot td{font-weight:700;background:#f3f6f2}
+.tbox{overflow-x:auto}
+.dchips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.dchips button{flex:1 1 30%;background:#f3f6f2;color:#111;border:1px solid #cfd8d2;padding:8px 6px;font-size:13px}
+.dchips button[aria-pressed=true]{background:#0b6b3a;color:#fff;border-color:#0b6b3a}
+@media print{@page{margin:12mm}.app,nav,.toast,.noprint{display:none!important}.sheet{position:static!important;display:block!important;background:none!important}.docwrap{max-height:none!important;overflow:visible!important;padding:0!important;border-radius:0!important;max-width:none!important}body{background:#fff}}

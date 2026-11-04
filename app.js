@@ -19,7 +19,8 @@ const isTmp=id=>typeof id=='string'&&id.charAt(0)=='n';
 const newCid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2);
 const tmpId=()=>'n'+newCid();
 function persist(){try{if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,photo:S.photo,debts:S.debts,pays:S.pays,sales:S.sales,ex:S.ex,q:S.q,map:S.map}))}catch(e){}}
-function enqueue(it){S.q.push(it);persist()}
+const AT=it=>it.at?{created_at:it.at}:{};
+function enqueue(it){if(!it.at)it.at=new Date().toISOString();S.q.push(it);persist()}
 function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.owner=c.owner||'';S.phone=c.phone||'';S.photo=c.photo||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};S.ex=c.ex||[];return true}return false}
 function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.owner='';S.phone='';S.photo='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.ex=[]}}
 function banner(){const n=S.q.length;if(!n&&!S.offline)return '';return `<button class="sync" data-act="sync">${n?n+(n==1?' entry is':' entries are')+' saved on this phone and waiting to send. Tap to retry.':'No network. Showing records saved on this phone.'}</button>`}
@@ -28,14 +29,14 @@ async function insIdem(t,row){const r=await sb.from(t).insert(row).select().sing
  if(r.error&&r.error.code=='23505'){const g=await sb.from(t).select('*').eq('cid',row.cid).single();if(g.error)throw g.error;return g.data}
  if(r.error)throw r.error;return r.data}
 async function runItem(it){const R=id=>S.map[id]||id;
- if(it.k=='debt'){const r=await insIdem('debts',{...it.row,cid:it.cid});S.map[it.tmp]=r.id}
- else if(it.k=='sale'){const r=await insIdem('sales',{...it.row,cid:it.cid});S.map[it.tmp]=r.id}
- else if(it.k=='pay'){await insIdem('payments',{debt_id:R(it.debt),amount:it.row.amount,cid:it.cid})}
+ if(it.k=='debt'){const r=await insIdem('debts',{...it.row,cid:it.cid,...AT(it)});S.map[it.tmp]=r.id}
+ else if(it.k=='sale'){const r=await insIdem('sales',{...it.row,cid:it.cid,...AT(it)});S.map[it.tmp]=r.id}
+ else if(it.k=='pay'){await insIdem('payments',{debt_id:R(it.debt),amount:it.row.amount,cid:it.cid,...AT(it)})}
  else if(it.k=='upd'){ok(await sb.from('debts').update(it.row).eq('id',R(it.debt)))}
  else if(it.k=='del'){ok(await sb.from('debts').delete().eq('id',R(it.debt)))}
  else if(it.k=='delsale'){ok(await sb.from('sales').delete().eq('id',R(it.id)))}
  else if(it.k=='prof'){ok(await sb.from('shops').upsert({user_id:S.uid,...it.row}))}
- else if(it.k=='exp'){const r=await insIdem('expenses',{...it.row,cid:it.cid});S.map[it.tmp]=r.id}
+ else if(it.k=='exp'){const r=await insIdem('expenses',{...it.row,cid:it.cid,...AT(it)});S.map[it.tmp]=r.id}
  else if(it.k=='delexp'){ok(await sb.from('expenses').delete().eq('id',R(it.id)))}
  else if(it.k=='updsale'){ok(await sb.from('sales').update(it.row).eq('id',R(it.id)))}}
 async function sync(){
@@ -115,12 +116,12 @@ const colOf=d=>S.pays.filter(p=>payDay(p)==d).reduce((t,p)=>t+Number(p.amount),0
 function balText(){const am=Number(S.d.amount)||0,pn=Number(S.d.pn)||0;if(!(am>0))return '';if(pn>=am&&pn>0)return 'Paid now must be less than the total price';return 'Customer will owe '+naira(am-(pn>0?pn:0))}
 function collectedHtml(d){const ps=S.pays.filter(p=>payDay(p)==d).slice().reverse();
  if(!ps.length)return '<div class="empty">No debts collected '+(d==off(0)?'today':'on this day')+'.</div>';
- return ps.map(p=>{const x=debtOf(p.debt_id);return `<div class="item"><div class="l1">${x?`<button class="name linkn" data-act="cust" data-v="${esc(ck(x.customer_name))}">${esc(x.customer_name)} ›</button>`:'<span class="name">Customer</span>'}<span class="amt">${naira(p.amount)}</span></div><div class="m">${new Date(p.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}${x&&balOf(x)>0?' · still owes '+naira(balOf(x)):' · fully paid'}</div></div>`}).join('')}
+ return ps.map(p=>{const x=debtOf(p.debt_id);return `<div class="item"><div class="l1">${x?`<button class="name linkn" data-act="cust" data-v="${esc(ck(x.customer_name))}">${esc(x.customer_name)} ›</button>`:'<span class="name">Customer</span>'}<span class="amt">${naira(p.amount)}</span></div><div class="m">${fmtT(p.created_at)}${x&&balOf(x)>0?' · still owes '+naira(balOf(x)):' · fully paid'}</div></div>`}).join('')}
 function debtsList(){const q=(S.fd||'').trim().toLowerCase(),qd=q.replace(/\D/g,'');
  const list=openD().filter(dueFilter).filter(x=>!q||String(x.customer_name).toLowerCase().includes(q)||(qd.length>2&&String(x.phone||'').replace(/\D/g,'').includes(qd)));
  let h='';
  if(!list.length)h+=`<div class="empty">${q?'No open debt found for “'+esc(S.fd)+'”.':'Nobody owes you. Tap “Add debt” when someone takes goods on credit.'}</div>`;
- list.forEach(x=>{const t=tagFor(x);h+=`<div class="item"><div class="l1"><button class="name linkn" data-act="cust" data-v="${esc(ck(x.customer_name))}">${esc(x.customer_name)} ›</button><span class="amt">${naira(balOf(x))}</span></div>${paidOf(x)>0?`<div class="m">Owed ${naira(x.amount)}, paid ${naira(paidOf(x))}</div>`:''}<span class="tag ${t[0]}">${t[1]}</span><div class="acts"><button class="b1" data-act="remind" data-v="${x.id}">Remind</button><button class="b2" data-act="pay" data-v="${x.id}">Payment</button><button class="b2" data-act="edit" data-v="${x.id}">Edit</button></div></div>`});
+ list.forEach(x=>{const t=tagFor(x);h+=`<div class="item"><div class="l1"><button class="name linkn" data-act="cust" data-v="${esc(ck(x.customer_name))}">${esc(x.customer_name)} ›</button><span class="amt">${naira(balOf(x))}</span></div>${paidOf(x)>0?`<div class="m">Owed ${naira(x.amount)}, paid ${naira(paidOf(x))}</div>`:''}${x.created_at?`<div class="m">Recorded ${fmtDT(x.created_at)}</div>`:''}<span class="tag ${t[0]}">${t[1]}</span><div class="acts"><button class="b1" data-act="remind" data-v="${x.id}">Remind</button><button class="b2" data-act="pay" data-v="${x.id}">Payment</button><button class="b2" data-act="edit" data-v="${x.id}">Edit</button></div></div>`});
  return h}
 function debtsView(){const list=openD(),total=list.reduce((s,x)=>s+balOf(x),0),late=list.filter(x=>dayDiff(x.due_date)<0).reduce((s,x)=>s+balOf(x),0);
  let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${esc(S.shop||'My shop')}</h1></div></div>`;
@@ -129,7 +130,7 @@ function debtsView(){const list=openD(),total=list.reduce((s,x)=>s+balOf(x),0),l
  h+=`${chipsBar()}<div id="dlist">${debtsAll()}</div>`;
  return h+'<button class="fab" data-act="adddebt">+ Add debt</button>'}
 function salesList(){const q=(S.fs||'').trim().toLowerCase(),d=dayOf();let h='';
- const row=(s,sd)=>`<div class="item"><div class="l1"><span class="name">${esc(s.item)}</span><span class="amt">${naira(s.amount)}</span></div><div class="l1"><span class="m">${sd?dayLabel(s.sale_date)+' · ':''}${s.method}${s.method=='Credit'?' (added to debts)':''}</span><span style="white-space:nowrap">${s.method!='Credit'?`<button class="del" data-act="editsale" data-v="${s.id}">Edit</button>`:''}<button class="del" data-act="rcpt" data-v="${s.id}">Receipt</button><button class="del" data-act="delsale" data-v="${s.id}">Remove</button></span></div></div>`;
+ const row=(s,sd)=>`<div class="item"><div class="l1"><span class="name">${esc(s.item)}</span><span class="amt">${naira(s.amount)}</span></div><div class="l1"><span class="m">${sd?dayLabel(s.sale_date)+' · ':''}${recT(s.created_at,s.sale_date)?recT(s.created_at,s.sale_date)+' · ':''}${s.method}${s.method=='Credit'?' (added to debts)':''}</span><span style="white-space:nowrap">${s.method!='Credit'?`<button class="del" data-act="editsale" data-v="${s.id}">Edit</button>`:''}<button class="del" data-act="rcpt" data-v="${s.id}">Receipt</button><button class="del" data-act="delsale" data-v="${s.id}">Remove</button></span></div></div>`;
  if(q){const r=S.sales.filter(s=>String(s.item).toLowerCase().includes(q)).reverse().sort((a,b)=>a.sale_date<b.sale_date?1:a.sale_date>b.sale_date?-1:0);
   h+=`<h2 class="sec">Search results (${r.length})</h2>`;
   if(!r.length)h+=`<div class="empty">No sale found for “${esc(S.fs)}”.</div>`;
@@ -159,7 +160,7 @@ function reportsView(){const m={};S.sales.forEach(s=>{(m[s.sale_date]=m[s.sale_d
  let h='<div class="top"><div><h1>Sales reports</h1><div class="shop">Daily, weekly and monthly totals</div></div></div><div class="chips">'+[['day','Daily'],['week','Weekly'],['month','Monthly']].map(p=>`<button class="chip" data-act="rp" data-v="${p[0]}" aria-pressed="${S.rp==p[0]}">${p[1]}</button>`).join('')+'</div>';
  h+='<div class="bars">'+dd.slice().reverse().map(x=>{const i=dd.indexOf(x);return `<button class="bar1" data-act="rb" data-v="${i}" aria-pressed="${i==S.rsel}"><span>${fmtK(x.t)}</span><i style="height:${Math.max(4,Math.round(x.t/mx*100))}px"></i><span>${x.b.label}</span></button>`}).join('')+'</div>';
  h+=`<div class="sum"><p><b>${cur.b.label}</b>${S.rp!='day'?` <span class="m">${fmtD(cur.b.from)} to ${fmtD(cur.b.to)}</span>`:''}</p><div class="r"><span>Total sales</span><b>${naira(cur.t)}</b></div><div class="r"><span>Cash</span><b>${naira(sm('Cash'))}</b></div><div class="r"><span>Transfer</span><b>${naira(sm('Transfer'))}</b></div><div class="r"><span>Credit (new debts)</span><b>${naira(sm('Credit'))}</b></div>${profitRows(cur.b)}`+(cur.r.length>1?`<div class="r"><span>Average per selling day</span><b>${naira(Math.round(cur.t/cur.r.length))}</b></div><div class="r"><span>Best day</span><b>${fmtD(best.date)}, ${naira(tot(best))}</b></div>`:'')+'</div>';
- return h+'<p class="m">Tap any bar to see that day, week or month.</p><h2 class="sec">Backup your records</h2><p class="m">Save your records as files that open in Excel or Google Sheets. Sales cover the last 2 years.</p><button class="full alt" data-act="exp" data-v="sales">Download all sales</button><button class="full alt" data-act="exp" data-v="debts">Download all debts</button><button class="full alt" data-act="exp" data-v="pays">Download payments received</button>'}
+ return h+'<p class="m">Tap any bar to see that day, week or month.</p><h2 class="sec">Reports you can save or print</h2><p class="m">Each report shows your shop name, dates and times. Save it as a PDF or download it as a spreadsheet.</p><button class="full alt" data-act="doc" data-v="sales">Sales report</button><button class="full alt" data-act="doc" data-v="pays">Payments received</button><button class="full alt" data-act="doc" data-v="exp">Expenses report</button><button class="full alt" data-act="doc" data-v="debts">Customer debts</button><button class="full alt" data-act="doc" data-v="profit">Profit report (day by day)</button>'}
 const ck=n=>String(n||'').trim().toLowerCase().replace(/\s+/g,' ');
 const fmtY=t=>new Date(t).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
 function pastCust(){const q=(S.fd||'').trim().toLowerCase();if(!q)return '';
@@ -194,7 +195,7 @@ function rallSheet(){const l=openD().filter(x=>dayDiff(x.due_date)<0);
  l.forEach(x=>{const good=waNum(x.phone).length==13,done=S.sent[x.id];
   h+=`<div class="item"><div class="l1"><span class="name">${esc(x.customer_name)}</span><span class="amt">${naira(balOf(x))}</span></div><div class="l1"><span class="m">${-dayDiff(x.due_date)} days late${done?' · sent ✓':''}</span>`+(good?`<button class="b1" style="flex:none" data-act="sendone" data-v="${x.id}">${done?'Send again':'Send'}</button>`:`<button class="b2" style="flex:none" data-act="remind" data-v="${x.id}">Add number</button>`)+'</div></div>'});
  return h+'<button class="full alt" data-act="close">Close</button></div>'}
-function csvCell(v){v=String(v==null?'':v);if(/^[=+\-@]/.test(v))v="'"+v;return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function csvCell(v){const isN=typeof v=='number';v=String(v==null?'':v);if(!isN&&/^[=+\-@]/.test(v))v="'"+v;return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function downloadCsv(name,rows){const txt='\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');const b=new Blob([txt],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
 function custSheet(){
  const key=S.cust,ds=S.debts.filter(x=>ck(x.customer_name)==key);
@@ -210,7 +211,7 @@ function custSheet(){
  h+=`<div class="sum"><div class="r"><span>Total taken on credit</span><b>${naira(taken)}</b></div><div class="r"><span>Total paid</span><b>${naira(paid)}</b></div><div class="r"><span>Still owes</span><b>${naira(bal)}</b></div></div>`;
  ds.filter(x=>!x.paid&&balOf(x)>0).forEach(x=>{h+=`<div class="item"><div class="l1"><span class="name">Owes ${naira(balOf(x))}</span><button class="b2" style="flex:none" data-act="pay" data-v="${x.id}">Payment</button></div><div class="m">Due ${fmtD(x.due_date)}</div></div>`});
  h+='<h2 class="sec">History</h2>';
- h+=ev.map(e=>`<div class="item"><div class="l1"><span class="name">${e.k=='pay'?'Paid':'Took on credit'}</span><span class="amt">${naira(e.a)}</span></div><div class="m">${fmtY(e.t)}${e.k=='debt'?' · due '+fmtD(e.due):''}</div></div>`).join('');
+ h+=ev.map(e=>`<div class="item"><div class="l1"><span class="name">${e.k=='pay'?'Paid':'Took on credit'}</span><span class="amt">${naira(e.a)}</span></div><div class="m">${fmtY(e.t)}, ${fmtT(e.t)}${e.k=='debt'?' · due '+fmtD(e.due):''}</div></div>`).join('');
  h+='<button class="full alt" data-act="close">Close</button></div>';
  return h}
 function summaryText(d){const L=[];
@@ -223,15 +224,72 @@ function summaryText(d){const L=[];
  L.push('Credit (new debts): '+naira(sumS('Credit',d)));
  L.push('Debts collected: '+naira(colOf(d)));L.push('Spent: '+naira(expSum(d)));L.push('Profit (sales - spent): '+nm(sumS(null,d)-expSum(d)));
  const ps=S.pays.filter(p=>payDay(p)==d);
- if(ps.length){L.push('');L.push('Paid by:');ps.slice(0,15).forEach(p=>{const x=debtOf(p.debt_id);L.push('- '+(x?x.customer_name:'Customer')+': '+naira(p.amount))});if(ps.length>15)L.push('and '+(ps.length-15)+' more')}
+ if(ps.length){L.push('');L.push('Paid by:');ps.slice(0,15).forEach(p=>{const x=debtOf(p.debt_id);L.push('- '+(x?x.customer_name:'Customer')+': '+naira(p.amount)+' ('+fmtT(p.created_at)+')')});if(ps.length>15)L.push('and '+(ps.length-15)+' more')}
  L.push('');
  L.push('Total owed to you now: '+naira(openD().reduce((t,x)=>t+balOf(x),0)));
- L.push('Sent from TradeLog NG');
+ L.push('Sent from TradeLog NG, '+fmtT(new Date().toISOString()));
  return L.join('\n')}
+const fmtT=t=>new Date(t).toLocaleTimeString('en-GB',{hour:'numeric',minute:'2-digit',hour12:true});
+const fmtYD=s=>fmtY(s+'T00:00:00');
+const fmtDT=t=>fmtD(iso(new Date(t)))+', '+fmtT(t);
+const recT=(c,d)=>{if(!c)return '';const t=fmtT(c),cd=iso(new Date(c));return cd==d?t:'added '+fmtD(cd)+', '+t};
+const moneyF=n=>(n<0?'-':'')+Math.abs(Number(n)).toLocaleString('en-NG');
+function rangeOf(per){const t=off(0);
+ if(per=='today')return [t,t,'Today, '+fmtYD(t)];
+ if(per=='week'){const f=off(-((todayD().getDay()+6)%7));return [f,t,'This week: '+fmtYD(f)+' to '+fmtYD(t)]}
+ if(per=='month'){const d=todayD(),f=iso(new Date(d.getFullYear(),d.getMonth(),1));return [f,t,'This month: '+fmtYD(f)+' to '+fmtYD(t)]}
+ if(per=='30'){const f=off(-29);return [f,t,'Last 30 days: '+fmtYD(f)+' to '+fmtYD(t)]}
+ return ['0000-01-01',t,'All records up to '+fmtYD(t)]}
+function docData(type,per){
+ const r=rangeOf(per),f=r[0],t=r[1],inR=x=>x>=f&&x<=t,now=new Date().toISOString(),gen=fmtY(now)+', '+fmtT(now);
+ const sumA=(a,fn)=>a.reduce((s,x)=>s+Number(fn(x)),0);
+ const cmp=(x,y)=>x<y?-1:x>y?1:0;
+ let title='',plabel=r[2],head=[],rows=[],sum=[],num=[];
+ if(type=='sales'){title='Sales report';head=['No.','Date','Time','Item','Paid by','Amount (NGN)'];num=[5];
+  const l=S.sales.filter(s=>inR(s.sale_date)).sort((a,b)=>cmp(a.sale_date+(a.created_at||''),b.sale_date+(b.created_at||'')));
+  rows=l.map((s,i)=>[i+1,fmtYD(s.sale_date),s.created_at?fmtT(s.created_at):'',s.item,s.method,Number(s.amount)]);
+  const by=m=>sumA(l.filter(s=>s.method==m),s=>s.amount);
+  sum=[['Number of sales',l.length],['Total sales',sumA(l,s=>s.amount),1],['Paid in cash',by('Cash'),1],['Paid by transfer',by('Transfer'),1],['Credit (owed by customers)',by('Credit'),1]]}
+ else if(type=='pays'){title='Payments received report';head=['No.','Date','Time','Customer','Amount (NGN)'];num=[4];
+  const l=S.pays.filter(p=>inR(payDay(p))).sort((a,b)=>cmp(String(a.created_at),String(b.created_at)));
+  rows=l.map((p,i)=>{const x=debtOf(p.debt_id);return [i+1,fmtYD(payDay(p)),fmtT(p.created_at),x?x.customer_name:'Customer',Number(p.amount)]});
+  sum=[['Number of payments',l.length],['Total collected',sumA(l,p=>p.amount),1]]}
+ else if(type=='exp'){title='Expenses report';head=['No.','Date','Time','Item','Type','Amount (NGN)'];num=[5];
+  const l=S.ex.filter(e=>inR(e.expense_date)).sort((a,b)=>cmp(a.expense_date+(a.created_at||''),b.expense_date+(b.created_at||'')));
+  rows=l.map((e,i)=>[i+1,fmtYD(e.expense_date),e.created_at?fmtT(e.created_at):'',e.item,e.category||'',Number(e.amount)]);
+  sum=[['Number of expenses',l.length],['Total spent',sumA(l,e=>e.amount),1]];
+  const cats={};l.forEach(e=>{const c=e.category||'Other';cats[c]=(cats[c]||0)+Number(e.amount)});Object.keys(cats).forEach(c=>sum.push(['   '+c,cats[c],1]))}
+ else if(type=='debts'){title='Customer debts report';plabel='All debts recorded, as at '+gen;
+  head=['No.','Customer','Phone','Recorded','Due date','Total (NGN)','Paid (NGN)','Balance (NGN)','Status'];num=[5,6,7];
+  const l=S.debts.slice().sort((a,b)=>cmp(String(a.created_at),String(b.created_at)));
+  rows=l.map((x,i)=>{const b=balOf(x),k=dayDiff(x.due_date);return [i+1,x.customer_name,x.phone||'',x.created_at?fmtYD(iso(new Date(x.created_at)))+', '+fmtT(x.created_at):'',fmtYD(x.due_date),Number(x.amount),paidOf(x),b,b==0?'Paid':k<0?'Overdue ('+(-k)+(k==-1?' day)':' days)'):'Open']});
+  const o=l.filter(x=>balOf(x)>0);
+  sum=[['Customers still owing',o.length],['Total still owed',sumA(o,x=>balOf(x)),1],['Overdue amount',sumA(o.filter(x=>dayDiff(x.due_date)<0),x=>balOf(x)),1]]}
+ else{title='Profit report';head=['Date','Sales','Cash','Transfer','Credit','Collected','Spent','Profit'];num=[1,2,3,4,5,6,7];
+  const days={},g=k=>days[k]||(days[k]={c:0,t:0,cr:0,col:0,sp:0});
+  S.sales.filter(s=>inR(s.sale_date)).forEach(s=>{const o=g(s.sale_date),a=Number(s.amount);if(s.method=='Cash')o.c+=a;else if(s.method=='Transfer')o.t+=a;else o.cr+=a});
+  S.pays.filter(p=>inR(payDay(p))).forEach(p=>{g(payDay(p)).col+=Number(p.amount)});
+  S.ex.filter(e=>inR(e.expense_date)).forEach(e=>{g(e.expense_date).sp+=Number(e.amount)});
+  const ks=Object.keys(days).sort();
+  rows=ks.map(k=>{const o=days[k],sl=o.c+o.t+o.cr;return [fmtYD(k),sl,o.c,o.t,o.cr,o.col,o.sp,sl-o.sp]});
+  const T=i=>rows.reduce((a,r)=>a+r[i],0),sales=T(1),spent=T(6),got=T(2)+T(3)+T(5);
+  sum=[['Total sales',sales,1],['Total spent',spent,1],['Profit (sales minus spent)',sales-spent,1],['Debts collected',T(5),1],['Money received (cash, transfer, debts collected)',got,1],['Money left after spending',got-spent,1]]}
+ return {title,plabel,gen,head,rows,sum,num}}
+function docSheet(){const D=S.doc,d=docData(D.type,D.per);
+ const pl=[['today','Today'],['week','This week'],['month','This month'],['30','Last 30 days'],['all','All time']];
+ let h='<div class="panel docwrap">';
+ if(D.type!='debts')h+='<div class="noprint dchips">'+pl.map(p=>`<button data-act="dper" data-v="${p[0]}" aria-pressed="${D.per==p[0]}">${p[1]}</button>`).join('')+'</div>';
+ h+=`<div class="dhead"><div class="dshop">${esc(S.shop||'My shop')}</div><div class="dm">${[S.owner,S.phone,(S.user&&S.user.email)||''].filter(Boolean).map(esc).join(' · ')}</div><h1>${esc(d.title)}</h1><div class="dm">${esc(d.plabel)}</div><div class="dm">Generated: ${esc(d.gen)}</div></div>`;
+ if(!d.rows.length)h+='<p class="dm">No records for this period.</p>';
+ else h+='<div class="tbox"><table><thead><tr>'+d.head.map((x,i)=>`<th class="${d.num.includes(i)?'n':''}">${esc(x)}</th>`).join('')+'</tr></thead><tbody>'+d.rows.map(r=>'<tr>'+r.map((v,i)=>`<td class="${d.num.includes(i)?'n':''}">${d.num.includes(i)?moneyF(v):esc(v)}</td>`).join('')+'</tr>').join('')+'</tbody></table></div>';
+ h+='<table class="sumt"><tbody>'+d.sum.map(x=>`<tr class="tot"><td>${esc(x[0])}</td><td class="n">${x[2]?'₦'+moneyF(x[1]):esc(x[1])}</td></tr>`).join('')+'</tbody></table>';
+ h+='<p class="dm">Generated by TradeLog NG</p>';
+ h+='<div class="noprint"><button class="full" data-act="print">Save as PDF or print</button><button class="full alt" data-act="docsv">Download spreadsheet (Excel or Sheets)</button><button class="full alt" data-act="close">Close</button><p class="dm">Tip: on the print screen, choose “Save as PDF” as the printer.</p></div></div>';
+ return h}
 const nm=n=>n<0?'-'+naira(-n):naira(n);
 const expSum=d=>S.ex.filter(e=>e.expense_date==d).reduce((t,e)=>t+Number(e.amount),0);
-function saleReceipt(s){const cr=s.method=='Credit';return ['*'+(S.shop||'My shop')+'*','Receipt, '+fmtY(s.sale_date+'T00:00:00'),'','Item: '+s.item,(cr?'Balance still owed: ':'Amount paid: ')+naira(s.amount),cr?'Please pay the balance by the agreed date.':'Paid by: '+s.method,'','Thank you for your patronage.'].join('\n')}
-function payReceipt(x,am,bal){return ['*'+(S.shop||'My shop')+'*','Payment receipt, '+fmtY(new Date().toISOString()),'','Customer: '+x.customer_name,'Amount received: '+naira(am),bal>0?'Balance still owed: '+naira(bal):'Fully paid. Thank you!','','Thank you for your patronage.'].join('\n')}
+function saleReceipt(s){const cr=s.method=='Credit';return ['*'+(S.shop||'My shop')+'*','Receipt, '+fmtY(s.sale_date+'T00:00:00')+(s.created_at?', '+fmtT(s.created_at):''),'','Item: '+s.item,(cr?'Balance still owed: ':'Amount paid: ')+naira(s.amount),cr?'Please pay the balance by the agreed date.':'Paid by: '+s.method,'','Thank you for your patronage.'].join('\n')}
+function payReceipt(x,am,bal){return ['*'+(S.shop||'My shop')+'*','Payment receipt, '+fmtY(new Date().toISOString())+', '+fmtT(new Date().toISOString()),'','Customer: '+x.customer_name,'Amount received: '+naira(am),bal>0?'Balance still owed: '+naira(bal):'Fully paid. Thank you!','','Thank you for your patronage.'].join('\n')}
 function profitRows(b){const t0=off(0),to=b.to>t0?t0:b.to,inR=x=>x>=b.from&&x<=to;
  const sl=S.sales.filter(s=>inR(s.sale_date)),sales=sl.reduce((t,s)=>t+Number(s.amount),0),spent=S.ex.filter(e=>inR(e.expense_date)).reduce((t,e)=>t+Number(e.amount),0),col=S.pays.filter(p=>inR(payDay(p))).reduce((t,p)=>t+Number(p.amount),0),got=sl.filter(s=>s.method!='Credit').reduce((t,s)=>t+Number(s.amount),0)+col;
  return `<div class="r"><span>Spent (expenses)</span><b>${naira(spent)}</b></div><div class="r"><span>Profit (sales − spent)</span><b class="${sales-spent<0?'neg':''}">${nm(sales-spent)}</b></div><div class="r"><span>Money received (cash, transfer, debts collected)</span><b>${naira(got)}</b></div><div class="r"><span>Money left after spending</span><b class="${got-spent<0?'neg':''}">${nm(got-spent)}</b></div>`}
@@ -242,13 +300,14 @@ function expensesView(){const d=dayOf(),isT=d==off(0),c=S.d.xc||'Restock',list=S
  h+=`<div class="item"><label style="margin-top:0">What did you spend on</label><input data-d="xi" placeholder="e.g. Transport to market" value="${esc(S.d.xi)}"><label>Amount (₦)</label><input data-d="xa" type="number" inputmode="numeric" value="${esc(S.d.xa)}"><label>Type</label><div class="chips wrap">`+['Restock','Transport','Rent','Light/fuel','Staff','Other'].map(x=>`<button class="chip" data-act="xcat" data-v="${x}" aria-pressed="${c==x}">${x}</button>`).join('')+'</div><button class="full" data-act="addexp">Add expense</button></div>';
  h+=`<h2 class="sec">Expenses (${list.length})</h2>`;
  if(!list.length)h+='<div class="empty">No expenses '+(isT?'recorded yet today':'on this day')+'.</div>';
- h+=list.map(e=>`<div class="item"><div class="l1"><span class="name">${esc(e.item)}</span><span class="amt">${naira(e.amount)}</span></div><div class="l1"><span class="m">${esc(e.category||'')}</span><button class="del" data-act="delexp" data-v="${e.id}">Remove</button></div></div>`).join('');
+ h+=list.map(e=>`<div class="item"><div class="l1"><span class="name">${esc(e.item)}</span><span class="amt">${naira(e.amount)}</span></div><div class="l1"><span class="m">${esc(e.category||'')}${e.created_at?' · '+recT(e.created_at,e.expense_date):''}</span><button class="del" data-act="delexp" data-v="${e.id}">Remove</button></div></div>`).join('');
  return h}
 async function pinHash(p,salt){const b=new TextEncoder().encode(salt+':'+p),h=await crypto.subtle.digest('SHA-256',b);return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function getPin(){try{return JSON.parse(localStorage.getItem('tl_pin')||'null')}catch(e){return null}}
 function lockView(){return `<div class="auth" style="text-align:center"><img src="icon-192.png" width="72" height="72" style="border-radius:18px" alt=""><div class="brand" style="margin-top:12px">TradeLog NG</div><h1>Enter your PIN</h1><div class="shop">${esc(S.shop||'')}</div><label>4-digit PIN</label><input data-d="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" style="text-align:center;font-size:24px;letter-spacing:8px" value="${esc(S.d.pin)}"><button class="full" data-act="unlock">Unlock</button><button class="full alt" data-act="lockout">Forgot PIN? Sign out</button></div>`}
 function sheetView(){
  if(S.sheet=='cust')return custSheet();
+ if(S.sheet=='doc'&&S.doc)return docSheet();
  if(S.sheet=='editsale'){const s=S.sales.find(z=>z.id==S.remId);if(!s)return '';const m=S.d.sem||s.method;return `<div class="panel"><h1>Edit sale</h1><label>What was sold</label><input data-d="sei" value="${esc(S.d.sei)}"><label>Amount (₦)</label><input data-d="sea" type="number" inputmode="numeric" value="${esc(S.d.sea)}"><label>Paid by</label><div class="chips">`+['Cash','Transfer'].map(x=>`<button class="chip" data-act="semethod" data-v="${x}" aria-pressed="${m==x}">${x}</button>`).join('')+`</div><label>Date</label><input data-d="sed" type="date" max="${off(0)}" value="${esc(S.d.sed)}"><button class="full" data-act="savesale">Save changes</button><button class="full alt" data-act="close">Cancel</button></div>`}
  if(S.sheet=='rcpt'&&S.rc)return `<div class="panel"><h1>Send receipt</h1><div class="wa" style="white-space:pre-line">${esc(S.rc.text)}</div><label>Customer WhatsApp number (optional)</label><input data-d="rcp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.rcp)}"><button class="full" style="background:var(--wa);color:#06260f" data-act="sendrc">Send on WhatsApp</button><button class="full alt" data-act="close">Done</button></div>`;
  if(S.sheet=='pinset')return `<div class="panel"><h1>${getPin()?'Change your PIN':'Set a PIN lock'}</h1><div class="shop">The app will ask for this PIN when you open it.</div><label>New 4-digit PIN</label><input data-d="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" value="${esc(S.d.pin)}"><label>Repeat the PIN</label><input data-d="pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off" value="${esc(S.d.pin2)}"><button class="full" data-act="pinsave">Save PIN</button><button class="full alt" data-act="close">Cancel</button></div>`;
@@ -348,6 +407,10 @@ async function act(a,v){
   S.locked=false;S.lockChecked=false;S.user=null;S.debts=[];S.pays=[];S.sales=[];S.ex=[];S.q=[];S.map={};S.uid=null;
   try{localStorage.removeItem('tl_cache');localStorage.removeItem('tl_pin')}catch(e){}
   S.d={method:'Cash'};S.mode='start';S.show=false;render()}
+ else if(a=='doc'){S.doc={type:v,per:v=='debts'?'all':'month'};S.sheet='doc';render()}
+ else if(a=='dper'){S.doc.per=v;render()}
+ else if(a=='print'){window.print()}
+ else if(a=='docsv'){const d=docData(S.doc.type,S.doc.per),top=[[S.shop||'My shop'],[[S.owner,S.phone].filter(Boolean).join(' · ')],[d.title],[d.plabel],['Generated: '+d.gen],[]];downloadCsv('tradelog-'+S.doc.type+'-'+off(0)+'.csv',top.concat([d.head]).concat(d.rows).concat([[]]).concat(d.sum.map(x=>[x[0],x[1]])));toast('Spreadsheet saved. Check your Downloads.')}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
  else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();window.open('https://wa.me/'+waNum(x.phone)+'?text='+encodeURIComponent(msg),'_blank')}
