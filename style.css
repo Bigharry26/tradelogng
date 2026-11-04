@@ -140,3 +140,16 @@ nav button.gfab{position:fixed;left:max(16px,calc(50% - 199px));bottom:calc(84px
 .gtip{margin-top:10px;padding:10px 12px;background:var(--greenbg);color:var(--green);border-radius:8px;font-size:13.5px}
 .hero{position:relative}
 .heye{position:absolute;top:12px;right:12px;width:38px;height:38px;padding:0;border-radius:50%;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center}
+.pcard{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,20,.06);margin-bottom:12px}
+.pban{height:64px;background:linear-gradient(135deg,#093d24,#0a5c34)}
+.pbody{padding:0 18px 18px;display:flex;flex-direction:column;align-items:flex-start}
+.pav{position:relative;width:84px;height:84px;border-radius:50%;margin-top:-42px;border:4px solid var(--card);background:var(--green);color:var(--on);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:26px;cursor:pointer;flex:none}
+.pav img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.pcam{position:absolute;right:-4px;bottom:-4px;width:28px;height:28px;border-radius:50%;background:var(--card);color:var(--green);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.pname{font-size:20px;font-weight:700;margin-top:10px;letter-spacing:-.01em}
+.pown{font-size:14px;color:var(--mute);margin-top:1px}
+.pinfo{margin-top:12px;width:100%;display:flex;flex-direction:column;gap:9px;padding-top:12px;border-top:1px solid var(--line);font-size:14px}
+.pinfo div{display:flex;align-items:center;gap:10px;color:var(--ink);min-width:0}
+.pinfo svg{color:var(--mute);flex:none}
+.pinfo span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pedit{margin-top:14px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:11px;font-weight:600}
