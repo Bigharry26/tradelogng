@@ -125,7 +125,7 @@ function debtsList(){const q=(S.fd||'').trim().toLowerCase(),qd=q.replace(/\D/g,
  list.forEach(x=>{const t=tagFor(x);h+=`<div class="item"><div class="l1"><button class="name linkn" data-act="cust" data-v="${esc(ck(x.customer_name))}">${esc(x.customer_name)} ›</button><span class="amt">${naira(balOf(x))}</span></div>${paidOf(x)>0?`<div class="m">Owed ${naira(x.amount)}, paid ${naira(paidOf(x))}</div>`:''}${x.created_at?`<div class="m">Recorded ${fmtDT(x.created_at)}</div>`:''}<span class="tag ${t[0]}">${t[1]}</span><div class="acts"><button class="b1" data-act="remind" data-v="${x.id}">Remind</button><button class="b2" data-act="pay" data-v="${x.id}">Payment</button><button class="b2" data-act="edit" data-v="${x.id}">Edit</button></div></div>`});
  return h}
 function debtsView(){const list=openD(),total=list.reduce((s,x)=>s+balOf(x),0),late=list.filter(x=>dayDiff(x.due_date)<0).reduce((s,x)=>s+balOf(x),0);
- let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${esc(S.shop||'My shop')}</h1></div></div>`;
+ let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${esc(S.shop||'My shop')}</h1></div>${bellBtn()}</div>`;
  h+=`<div class="hero"><small>Total owed to you</small><div class="big">${naira(total)}</div><div class="row"><span>${new Set(list.map(x=>ck(x.customer_name))).size} customers</span><span>${naira(late)} overdue</span></div></div>`;
  h+=`<input class="search" data-s="fd" type="search" placeholder="Search customer name or number" value="${esc(S.fd)}">`;
  h+=`${chipsBar()}<div id="dlist">${debtsAll()}</div>`;
@@ -173,7 +173,7 @@ function initials(n){const w=String(n||'').trim().split(/\s+/).filter(Boolean);r
 const goodPhoto=()=>S.photo&&String(S.photo).indexOf('data:image/')==0;
 function resizeImg(file,cb){const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const n=240,c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d'),m=Math.min(im.width,im.height);x.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,n,n);cb(c.toDataURL('image/jpeg',0.8))};im.onerror=()=>cb(null);im.src=r.result};r.onerror=()=>cb(null);r.readAsDataURL(file)}
 function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening',first=(S.owner||'').trim().split(' ')[0],o=openD(),late=o.filter(x=>dayDiff(x.due_date)<0),owed=o.reduce((a,x)=>a+balOf(x),0);
- let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${g}${first?', '+esc(first):''}</h1></div></div>`;
+ let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${g}${first?', '+esc(first):''}</h1></div>${bellBtn()}</div>`;
  h+=`<div class="item"><div class="prof"><label class="avatar">${goodPhoto()?`<img src="${esc(S.photo)}" alt="Profile picture">`:esc(initials(S.shop||S.owner))}<input type="file" accept="image/*" data-photo="1" style="display:none"></label><div><div class="name">${esc(S.shop||'My shop')}</div><div class="m">${esc(S.owner||'Add your full name')}</div>${S.phone?`<div class="m">${esc(S.phone)}</div>`:''}<div class="m">${esc((S.user&&S.user.email)||'')}</div><div class="m">Tap the picture to change it</div></div></div><button class="full alt" data-act="editprof">Edit profile</button></div>`;
  h+=`<div class="hero"><small>Sales today</small><div class="big">${naira(sumS(null,t))}</div><div class="row"><span>Cash ${naira(sumS('Cash',t))}</span><span>Transfer ${naira(sumS('Transfer',t))}</span><span>Credit ${naira(sumS('Credit',t))}</span></div><div class="row"><span>Collected ${naira(colOf(t))}</span></div></div>`;
  h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${new Set(o.map(x=>ck(x.customer_name))).size}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
@@ -306,8 +306,27 @@ function expensesView(){const d=dayOf(),isT=d==off(0),c=S.d.xc||'Restock',list=S
 async function pinHash(p,salt){const b=new TextEncoder().encode(salt+':'+p),h=await crypto.subtle.digest('SHA-256',b);return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,'0')).join('')}
 function getPin(){try{return JSON.parse(localStorage.getItem('tl_pin')||'null')}catch(e){return null}}
 function lockView(){return `<div class="auth" style="text-align:center"><img src="icon-192.png" width="72" height="72" style="border-radius:18px" alt=""><div class="brand" style="margin-top:12px">TradeLog NG</div><h1>Enter your PIN</h1><div class="shop">${esc(S.shop||'')}</div><label>4-digit PIN</label><input data-d="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" style="text-align:center;font-size:24px;letter-spacing:8px" value="${esc(S.d.pin)}"><button class="full" data-act="unlock">Unlock</button><button class="full alt" data-act="lockout">Forgot PIN? Sign out</button></div>`}
+const bellSvg='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+function seenLoad(){let o=null;try{o=JSON.parse(localStorage.getItem('tl_seen')||'null')}catch(e){}if(!o||o.d!=off(0))o={d:off(0),k:{}};return o}
+function seenSave(o){try{localStorage.setItem('tl_seen',JSON.stringify(o))}catch(e){}}
+function notifs(){const late=[],today=[],soon=[];openD().forEach(x=>{const k=dayDiff(x.due_date);if(k<0)late.push(x);else if(k==0)today.push(x);else if(k<=3)soon.push(x)});return {late,today,soon,urgent:late.concat(today)}}
+const nkey=x=>x.id+':'+(dayDiff(x.due_date)<0?'late':'today');
+const markSeen=x=>{const sn=seenLoad();sn.k[nkey(x)]=1;seenSave(sn)};
+function badgeN(){const n=notifs(),sn=seenLoad();return n.urgent.filter(x=>!sn.k[nkey(x)]).length}
+function bellBtn(){const b=badgeN();return `<button class="bell" data-act="bell" aria-label="Notifications">${bellSvg}${b?`<span class="badge">${b>99?'99+':b}</span>`:''}</button>`}
+function notifSheet(){const n=notifs(),sn=seenLoad();
+ const row=(x,u)=>{const k=dayDiff(x.due_date),st=k<0?-k+(k==-1?' day late':' days late'):k==0?'Due today':'Due in '+k+(k==1?' day':' days'),seen=u&&sn.k[nkey(x)];
+  return `<div class="item"${seen?' style="opacity:.6"':''}><div class="l1"><span class="name">${esc(x.customer_name)}</span><span class="amt">${naira(balOf(x))}</span></div><div class="l1"><span class="m">${st}${seen?' · seen':''}</span><button class="b1" style="flex:none" data-act="nremind" data-v="${x.id}">Remind</button></div></div>`};
+ let h='<div class="panel"><h1>Notifications</h1>';
+ if(n.urgent.length)h+='<h2 class="sec">Needs attention ('+n.urgent.length+')</h2>'+n.urgent.map(x=>row(x,1)).join('');
+ if(n.soon.length)h+='<h2 class="sec">Coming up in 3 days ('+n.soon.length+')</h2>'+n.soon.map(x=>row(x,0)).join('');
+ if(S.q.length)h+=`<h2 class="sec">Waiting to send</h2><div class="item"><div class="m">${S.q.length} ${S.q.length==1?'entry is':'entries are'} saved on this phone and not sent yet.</div><button class="b2" style="margin-top:8px;width:100%" data-act="sync">Try sending now</button></div>`;
+ if(!n.urgent.length&&!n.soon.length&&!S.q.length)h+='<div class="empty">You are all caught up. No debts are due soon.</div>';
+ if(n.urgent.length)h+='<button class="full alt" data-act="seenall">Mark all as seen</button>';
+ return h+'<button class="full alt" data-act="close">Close</button></div>'}
 function sheetView(){
  if(S.sheet=='cust')return custSheet();
+ if(S.sheet=='notif')return notifSheet();
  if(S.sheet=='doc'&&S.doc)return docSheet();
  if(S.sheet=='editsale'){const s=S.sales.find(z=>z.id==S.remId);if(!s)return '';const m=S.d.sem||s.method;return `<div class="panel"><h1>Edit sale</h1><label>What was sold</label><input data-d="sei" value="${esc(S.d.sei)}"><label>Amount (₦)</label><input data-d="sea" type="number" inputmode="numeric" value="${esc(S.d.sea)}"><label>Paid by</label><div class="chips">`+['Cash','Transfer'].map(x=>`<button class="chip" data-act="semethod" data-v="${x}" aria-pressed="${m==x}">${x}</button>`).join('')+`</div><label>Date</label><input data-d="sed" type="date" max="${off(0)}" value="${esc(S.d.sed)}"><button class="full" data-act="savesale">Save changes</button><button class="full alt" data-act="close">Cancel</button></div>`}
  if(S.sheet=='rcpt'&&S.rc)return `<div class="panel"><h1>Send receipt</h1><div class="wa" style="white-space:pre-line">${esc(S.rc.text)}</div><label>Customer WhatsApp number (optional)</label><input data-d="rcp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.rcp)}"><button class="full" style="background:var(--wa);color:#06260f" data-act="sendrc">Send on WhatsApp</button><button class="full alt" data-act="close">Done</button></div>`;
@@ -326,7 +345,7 @@ function render(){
  if(S.user&&S.locked){$('app').innerHTML=lockView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  if(!S.user){$('app').innerHTML=authView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  $('app').innerHTML=banner()+[homeView,debtsView,salesView,tonightView,reportsView,expensesView][S.tab]();
- $('nav').innerHTML='<div>'+[['Home',0],['Debts',1],['Sales',2],['Expenses',5],['Tonight',3],['Reports',4]].map(t=>`<button data-act="tab" data-v="${t[1]}" aria-selected="${S.tab==t[1]}">${t[0]}</button>`).join('')+'</div>';
+ $('nav').innerHTML='<div>'+[['Home',0],['Debts',1],['Sales',2],['Expenses',5],['Tonight',3],['Reports',4]].map(t=>`<button data-act="tab" data-v="${t[1]}" aria-selected="${S.tab==t[1]}">${t[0]}${t[1]==1&&badgeN()?`<span class="nb">${badgeN()}</span>`:''}</button>`).join('')+'</div>';
  $('sheet').innerHTML=sheetView();$('sheet').className='sheet'+(S.sheet?' on':'');
 }
 async function reload(){await sync()}
@@ -428,6 +447,9 @@ async function act(a,v){
   ok(await sb.from('expenses').delete().gte('id',0));
   ok(await sb.from('debts').delete().gte('id',0));
   S.debts=[];S.pays=[];S.sales=[];S.ex=[];S.map={};S.sent={};S.day=null;S.offline=false;persist();S.tab=0;render();toast('All records cleared')}
+ else if(a=='bell'){S.sheet='notif';render()}
+ else if(a=='nremind'){const x=debtOf(v);if(!x)return;markSeen(x);S.remId=v;S.d.rph=x.phone||'';S.sheet='remind';render()}
+ else if(a=='seenall'){const sn=seenLoad();notifs().urgent.forEach(x=>{sn.k[nkey(x)]=1});seenSave(sn);render();toast('Marked as seen')}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
  else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();window.open('https://wa.me/'+waNum(x.phone)+'?text='+encodeURIComponent(msg),'_blank')}
