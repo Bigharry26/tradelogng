@@ -18,12 +18,12 @@ const isNet=e=>{const m=String((e&&e.message)||e||'');return !navigator.onLine||
 const isTmp=id=>typeof id=='string'&&id.charAt(0)=='n';
 const newCid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2);
 const tmpId=()=>'n'+newCid();
-function persist(){try{if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,photo:S.photo,debts:S.debts,pays:S.pays,sales:S.sales,ex:S.ex,q:S.q,map:S.map}))}catch(e){}}
+function persist(){try{if(S.demo)return;if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,photo:S.photo,debts:S.debts,pays:S.pays,sales:S.sales,ex:S.ex,q:S.q,map:S.map}))}catch(e){}}
 const AT=it=>it.at?{created_at:it.at}:{};
 function enqueue(it){if(!it.at)it.at=new Date().toISOString();S.q.push(it);persist()}
 function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.owner=c.owner||'';S.phone=c.phone||'';S.photo=c.photo||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};S.ex=c.ex||[];return true}return false}
 function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.owner='';S.phone='';S.photo='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.ex=[]}}
-function banner(){const n=S.q.length;if(!n&&!S.offline)return '';return `<button class="sync" data-act="sync">${n?n+(n==1?' entry is':' entries are')+' saved on this phone and waiting to send. Tap to retry.':'No network. Showing records saved on this phone.'}</button>`}
+function banner(){if(S.demo)return '<button class="sync" data-act="exitdemo">You are trying the demo. Nothing is saved. Tap here to create your free account.</button>';const n=S.q.length;if(!n&&!S.offline)return '';return `<button class="sync" data-act="sync">${n?n+(n==1?' entry is':' entries are')+' saved on this phone and waiting to send. Tap to retry.':'No network. Showing records saved on this phone.'}</button>`}
 function softRender(){const a=document.activeElement;if(a&&a.tagName=='INPUT')return;render()}
 async function insIdem(t,row){const r=await sb.from(t).insert(row).select().single();
  if(r.error&&r.error.code=='23505'){const g=await sb.from(t).select('*').eq('cid',row.cid).single();if(g.error)throw g.error;return g.data}
@@ -42,6 +42,7 @@ async function runItem(it){const R=id=>S.map[id]||id;
  else if(it.k=='delpay'){ok(await sb.from('payments').delete().eq('id',R(it.id)))}}
 async function sync(){
  if(!S.user)return;
+ if(S.demo)return;
  if(S.syncing){S.again=true;return}
  S.syncing=true;
  try{
@@ -74,7 +75,7 @@ async function loadAll(){
  const sl=await fetchAll(()=>sb.from('sales').select('*').gte('sale_date',off(-730)).order('id'));
  const e=await fetchAll(()=>sb.from('expenses').select('*').gte('expense_date',off(-730)).order('id'));
  if(S.q.length)return false;
- S.shop=sh.data?sh.data.name:'';S.owner=sh.data?(sh.data.owner_name||''):'';S.phone=sh.data?(sh.data.phone||''):'';S.photo=sh.data?(sh.data.photo||''):'';S.debts=d;S.pays=p;S.sales=sl;S.ex=e;persist();return true}
+ S.shop=sh.data?sh.data.name:'';S.owner=sh.data?(sh.data.owner_name||''):'';S.phone=sh.data?(sh.data.phone||''):'';S.photo=sh.data?(sh.data.photo||''):'';S.debts=d;S.pays=p;S.sales=sl;S.ex=e;S.loaded=true;persist();return true}
 async function loadAllOld(){
  const sh=await sb.from('shops').select('name').maybeSingle();
  S.shop=sh.data?sh.data.name:'';
@@ -100,10 +101,10 @@ const eyeOn='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke=
 const eyeOff='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 function pwField(key,label,ac){return `<label>${label}</label><div class="pw"><input data-d="${key}" type="${S.show?'text':'password'}" autocomplete="${ac}" value="${esc(S.d[key])}"><button type="button" class="eye" data-act="eye" aria-label="Show or hide password">${S.show?eyeOff:eyeOn}</button></div>`}
 function authView(){const m=S.mode;
- if(m=='start')return `<div class="auth" style="text-align:center"><img src="icon-192.png" width="88" height="88" style="border-radius:22px" alt=""><div class="brand" style="margin-top:14px">TradeLog NG</div><h1>Record sales. Track debts.</h1><div class="shop">Your shop records, safe on your phone</div><button class="full" data-act="mode" data-v="in">Log in</button><button class="full alt" data-act="mode" data-v="up">Create account</button><p class="m" style="margin-top:18px"><a href="privacy.html" target="_blank" style="color:var(--green)">Terms and Privacy Policy</a></p></div>`;
+ if(m=='start')return `<div class="auth" style="text-align:center"><img src="icon-192.png" width="88" height="88" style="border-radius:22px" alt=""><div class="brand" style="margin-top:14px">TradeLog NG</div><h1>Record sales. Track debts.</h1><div class="shop">Your shop records, safe on your phone</div><div class="vp"><div>✓ Works even without network</div><div>✓ No ads. Your records stay private</div><div>✓ Free for now</div></div><button class="full" data-act="mode" data-v="in">Log in</button><button class="full alt" data-act="mode" data-v="up">Create account</button><button class="full alt" data-act="demo">Try it first (no account needed)</button><p class="m" style="margin-top:18px"><a href="privacy.html" target="_blank" style="color:var(--green)">Terms and Privacy Policy</a></p></div>`;
  const up=m=='up';
  return `<div class="auth"><button class="back" data-act="mode" data-v="start">${backSvg}Back</button><div class="brand">TradeLog NG</div><h1>${up?'Create your account':'Welcome back'}</h1><div class="shop">${up?'It takes about a minute':'Log in to see your records'}</div>`+
- (up?`<label>Your full name</label><input data-d="owner" placeholder="Chidi Okafor" autocomplete="name" value="${esc(S.d.owner)}"><label>Shop name</label><input data-d="shop" placeholder="Mama Chidi Provisions" value="${esc(S.d.shop)}">`:'')+
+ 
  `<label>Email</label><input data-d="email" type="email" autocomplete="email" value="${esc(S.d.email)}">`+
  pwField('password',up?'Password (6 or more characters)':'Password',up?'new-password':'current-password')+
  (up?pwField('password2','Verify your password','new-password'):'')+
@@ -147,8 +148,8 @@ function salesView(){const d=dayOf(),m=S.d.method||'Cash',pm=S.d.pm||'Cash',isT=
  let h=`<div class="top"><div><h1>Sales record</h1><div class="shop">${isT?'Add each sale as it happens':'Adding to '+dayLabel(d)}</div></div></div>`;
  h+=`<div class="daybar"><button data-act="dayprev" aria-label="Previous day">${chevL}</button><label class="dpick">📅 <b>${dayLabel(d)}</b><input type="date" data-day="1" max="${off(0)}" value="${d}"></label><button data-act="daynext" aria-label="Next day"${isT?' disabled':''}>${chevR}</button></div>`;
  h+=`<div class="hero"><small>Total sales ${isT?'today':'on '+dayLabel(d)}</small><div class="big">${naira(sumS(null,d))}</div><div class="row"><span>Cash ${naira(sumS('Cash',d))}</span><span>Transfer ${naira(sumS('Transfer',d))}</span><span>Credit ${naira(sumS('Credit',d))}</span></div><div class="row"><span>Debts collected ${naira(colOf(d))}</span></div></div><button class="full alt" style="margin-top:10px" data-act="share" data-v="${d}">Share this day on WhatsApp</button>`;
- h+=`<div class="item"><label style="margin-top:0">What was sold</label><input data-d="item" placeholder="e.g. Garri 2 paints" value="${esc(S.d.item)}"><label>Total price (₦)</label><input data-d="amount" type="number" inputmode="numeric" value="${esc(S.d.amount)}"><label>Paid by</label><div class="chips">`+['Cash','Transfer','Credit'].map(x=>`<button class="chip" data-act="method" data-v="${x}" aria-pressed="${m==x}">${x}</button>`).join('')+'</div>';
- if(m=='Credit')h+=`<label>Customer who owes</label><input data-d="cust" placeholder="e.g. Mrs. Bisi" value="${esc(S.d.cust)}"><label>Their WhatsApp number (optional)</label><input data-d="sph" type="tel" placeholder="0803 123 4567" value="${esc(S.d.sph)}"><label>Paid now (₦). Leave empty if nothing yet</label><input data-d="pn" type="number" inputmode="numeric" placeholder="0" value="${esc(S.d.pn)}"><label>Paid now by</label><div class="chips">`+['Cash','Transfer'].map(x=>`<button class="chip" data-act="pmethod" data-v="${x}" aria-pressed="${pm==x}">${x}</button>`).join('')+`</div><div class="m" id="bal" style="margin-top:8px">${balText()}</div>`;
+ h+=`<div class="item"><label style="margin-top:0">Amount (₦)</label><input data-d="amount" type="number" inputmode="numeric" placeholder="e.g. 3500" value="${esc(S.d.amount)}"><label>What was sold <span class="m">(optional)</span></label><input data-d="item" placeholder="e.g. Garri 2 paints" value="${esc(S.d.item)}"><label>Paid by</label><div class="chips">`+['Cash','Transfer','Credit'].map(x=>`<button class="chip" data-act="method" data-v="${x}" aria-pressed="${m==x}">${x}</button>`).join('')+'</div>';
+ if(m=='Credit')h+=`<label>Customer who owes</label><input data-d="cust" placeholder="e.g. Mrs. Bisi" value="${esc(S.d.cust)}"><label>Their WhatsApp number (optional)</label><input data-d="sph" type="tel" placeholder="0803 123 4567" value="${esc(S.d.sph)}"><label>Date they will pay</label><input data-d="cdue" type="date" min="${off(0)}" value="${esc(S.d.cdue||off(7))}"><label>Paid now (₦). Leave empty if nothing yet</label><input data-d="pn" type="number" inputmode="numeric" placeholder="0" value="${esc(S.d.pn)}"><label>Paid now by</label><div class="chips">`+['Cash','Transfer'].map(x=>`<button class="chip" data-act="pmethod" data-v="${x}" aria-pressed="${pm==x}">${x}</button>`).join('')+`</div><div class="m" id="bal" style="margin-top:8px">${balText()}</div>`;
  h+='<button class="full" data-act="addsale">Add sale</button></div>';
  h+=`<input class="search" data-s="fs" type="search" placeholder="Search all sales by item or customer" value="${esc(S.fs)}">`;
  h+=`<div id="slist">${salesList()}</div>`;
@@ -177,13 +178,14 @@ function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good mornin
  let h=`<div class="top"><div><div class="brand">TradeLog NG</div><h1>${g}${first?', '+esc(first):''}</h1></div>${bellBtn()}</div>`;
  h+=`<div class="pcard"><div class="pban"></div><div class="pbody"><label class="pav">${goodPhoto()?`<img src="${esc(S.photo)}" alt="Profile picture">`:`<span>${esc(initials(S.shop||S.owner))}</span>`}<input type="file" accept="image/*" data-photo="1" style="display:none"><span class="pcam">${camSvg}</span></label><div class="pname">${esc(S.shop||'My shop')}</div><div class="pown">${esc(S.owner||'Add your full name')}</div><div class="pinfo">${S.phone?`<div>${phSvg}<span>${esc(S.phone)}</span></div>`:''}${(S.user&&S.user.email)?`<div>${mlSvg}<span>${esc(S.user.email)}</span></div>`:''}${(S.user&&S.user.created_at)?`<div>${clSvg}<span>Member since ${esc(new Date(S.user.created_at).toLocaleDateString('en-GB',{month:'long',year:'numeric'}))}</span></div>`:''}</div><button class="pedit" data-act="editprof">${penSvg}Edit profile</button></div></div>`;
  
+ h+=checklist();
  h+=`<div class="hero"><small>Sales today</small><div class="big">${naira(sumS(null,t))}</div><div class="row"><span>Cash ${naira(sumS('Cash',t))}</span><span>Transfer ${naira(sumS('Transfer',t))}</span><span>Credit ${naira(sumS('Credit',t))}</span></div><div class="row"><span>Collected ${naira(colOf(t))}</span></div></div>`;
  h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${new Set(o.map(x=>ck(x.customer_name))).size}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
  h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button><button class="full alt" data-act="go" data-v="5">Add an expense</button>`;
  if(late.length)h+=`<button class="full" style="background:var(--wa);color:#06260f" data-act="rall">Remind overdue (${late.length})</button>`;
  h+=`<h2 class="sec">About</h2><a class="full alt" style="display:block;text-align:center;text-decoration:none;border-radius:10px;font-weight:600" href="privacy.html" target="_blank">Privacy policy and terms</a><h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="color:var(--red)" data-act="wipeopen">Clear all my records</button><button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
  return h}
-function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}">${goodPhoto()?'<button class="full alt" data-act="rmphoto">Remove photo</button>':''}<button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
+function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}">${waChips()}${goodPhoto()?'<button class="full alt" data-act="rmphoto">Remove photo</button>':''}<button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
 const dueFilter=x=>{const k=dayDiff(x.due_date);return S.ff=='late'?k<0:S.ff=='soon'?(k>=0&&k<=7):true};
 function chipsBar(){const l=openD().filter(x=>dayDiff(x.due_date)<0).length,sn=openD().filter(x=>{const k=dayDiff(x.due_date);return k>=0&&k<=7}).length;
  let h='<div class="chips" style="margin-top:12px">'+[['all','All'],['late','Overdue ('+l+')'],['soon','Due soon ('+sn+')']].map(c=>`<button class="chip" data-act="ff" data-v="${c[0]}" aria-pressed="${S.ff==c[0]}">${c[1]}</button>`).join('')+'</div>';
@@ -338,13 +340,14 @@ function moneyCard(t){const r=recvOn(t),sp=expSum(t),all=allRemain();
  return `<div class="mcard"><div class="mlabel">Money remaining</div><div class="mbig ${all<0?'neg2':''}">${nm(all)}</div><div class="msub">All money received, minus all you have spent</div><div class="mrows"><div><span>Received today</span><b>${naira(r)}</b></div><div><span>Spent today</span><b>${naira(sp)}</b></div><div><span>Left today</span><b class="${r-sp<0?'neg2':''}">${nm(r-sp)}</b></div></div></div>`}
 const fm=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
 const GUIDE=[
-{q:"Quick start: my first day",s:["Create your account with your full name, shop name, email and a password. Tick the box to agree, then tap **Create account**.","On **Home**, tap **Edit profile** to add your phone number, and tap the circle to add your picture.","Open the **Sales** tab and record your first sale.","Every evening, open **Tonight** to see your sales, money received, spending and who still owes you."],t:"The ? button is always here if you forget anything."},
+{q:"Quick start: my first day",s:["Create your account with your email and a password. Tick the box to agree, tap **Create account**, then tell the app your shop name.","On **Home**, tap **Edit profile** to add your phone number, and tap the circle to add your picture.","Open the **Sales** tab and record your first sale.","Every evening, open **Tonight** to see your sales, money received, spending and who still owes you."],t:"The ? button is always here if you forget anything."},
 {q:"How do I record a sale?",s:["Open the **Sales** tab.","Type what was sold, for example Garri 2 paints.","Type the total price.","Choose **Cash** or **Transfer**.","Tap **Add sale**. It appears in the list below with the time."],t:"Sold to someone who pays later? See the next question."},
 {q:"A customer pays part now and the rest later. How do I record it?",s:["Open the **Sales** tab. Type the item and the **total price**.","Tap **Credit** and type the customer’s name. Add her WhatsApp number if you have it.","In **Paid now**, type what she paid and choose **Cash** or **Transfer**. The app shows how much she will still owe.","Tap **Add sale**. The part she paid is counted as money received, and the balance goes to the **Debts** tab."],t:"Example: she buys goods worth ₦10,000 and pays ₦6,000. Type 10000 as the total, 6000 as paid now, and ₦4,000 is saved as her debt."},
 {q:"A customer takes goods and pays nothing yet",s:["Open the **Sales** tab and type the item and total price.","Tap **Credit** and type her name.","Leave **Paid now** empty.","Tap **Add sale**. The full amount goes to **Debts**."]},
 {q:"How do I add a debt from my old notebook?",s:["Open the **Debts** tab and tap **+ Add debt**.","Type the customer’s name, her WhatsApp number, the amount owed and the due date.","Tap **Save debt**."],t:"Use the same spelling for a customer’s name every time, so her history stays together."},
 {q:"A customer is paying her debt (part or full)",s:["Open the **Debts** tab. Type her name in the search bar if the list is long.","Tap **Payment** on her card.","The amount shows her full balance. For a part payment, change it to what she paid.","Tap **Save payment**. A receipt screen opens so you can send it on WhatsApp."],t:"When a debt is fully paid it leaves the Debts tab. Tap her name any time to see her full history."},
 {q:"I made a mistake. How do I fix it?",s:["**Wrong cash or transfer sale:** open **Sales** and tap **Edit** on it. Or tap **Remove** and record it again.","**Wrong credit sale or debt:** open **Debts**, tap **Edit** on the debt, and change it. To delete it, tap **Delete this debt**.","**Wrong payment received:** open **Tonight** (or **Sales** and pick the date), find it under **Debts collected**, and tap **Remove**. Her balance goes back up.","**Wrong expense:** open **Expenses** and tap **Remove**."],t:"Only remove a payment if it was a mistake. If the customer really paid, keep it."},
+{q:"I use WhatsApp Business. Will messages go from it?",s:["Open **Home** and tap **Edit profile**.","Under **Which WhatsApp do you use for customers?**, choose **WhatsApp Business** (or **WhatsApp** for the normal one).","Tap **Save profile**. From now on, reminders, receipts and summaries open in that app."],t:"**Automatic** lets your phone choose, and it may ask each time if both are installed. If the app you chose does not open, switch back to Automatic."},
 {q:"How do I remind a customer on WhatsApp?",s:["Open the **Debts** tab and tap **Remind** on her card.","Check her number, then tap **Send on WhatsApp**.","WhatsApp opens with the message ready. Tap send. It goes from your own number."],t:"To remind many people: on Debts, tap **Overdue**, then **Remind all overdue**, and tap **Send** next to each name."},
 {q:"How do I see sales from an earlier day?",s:["Open the **Sales** tab (or **Expenses**).","Tap the date bar with the 📅 to pick any day, or use the arrows to go back or forward one day.","Scroll to see every sale and every payment collected that day."],t:"For a whole week or month, use the **Reports** tab."},
 {q:"How do I search?",s:["**Debts tab:** type a customer’s name or phone number in the search bar.","**Sales tab:** type an item or a customer’s name to search sales from all days.","Clear the search box to go back to the normal list."]},
@@ -375,8 +378,29 @@ const phSvg='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke=
 const mlSvg='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg>';
 const clSvg='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
 const penSvg='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+function waPref(){try{return localStorage.getItem('tl_wa')||'auto'}catch(e){return 'auto'}}
+function waOpen(num,text){const pref=waPref(),web='https://wa.me/'+(num||'')+'?text='+encodeURIComponent(text||'');
+ if(pref!='auto'&&/android/i.test(navigator.userAgent)){const pkg=pref=='biz'?'com.whatsapp.w4b':'com.whatsapp';
+  location.href='intent://send/?'+(num?'phone='+num+'&':'')+'text='+encodeURIComponent(text||'')+'#Intent;scheme=whatsapp;package='+pkg+';S.browser_fallback_url='+encodeURIComponent(web)+';end';return}
+ window.open(web,'_blank')}
+const waChips=()=>{const p=waPref();return '<label>Which WhatsApp do you use for customers?</label><div class="chips wrap">'+[['auto','Automatic'],['wa','WhatsApp'],['biz','WhatsApp Business']].map(c=>`<button class="chip" data-act="wapref" data-v="${c[0]}" aria-pressed="${p==c[0]}">${c[1]}</button>`).join('')+'</div>'};
+function hideU(){const e=document.getElementById('utoast');if(e)e.remove()}
+function flushPend(){if(S.pend){clearTimeout(S.pend.t);const f=S.pend.fin;S.pend=null;hideU();f()}}
+function holdUndo(msg,fin,undo){flushPend();const el=document.createElement('div');el.id='utoast';el.className='utoast';el.innerHTML='<span>'+msg+'</span><button data-act="undo">Undo</button>';document.body.appendChild(el);S.pend={fin,undo,t:setTimeout(()=>{if(S.pend){S.pend=null;hideU();fin()}},6000)}}
+function demoLoad(){const dayAt=(n,h,m)=>{const d=todayD();d.setDate(d.getDate()+n);d.setHours(h,m,0,0);return d.toISOString()};
+ S.debts=[{id:1,customer_name:'Mrs. Bisi',phone:'',amount:12500,due_date:off(-5),paid:false,created_at:dayAt(-12,10,5)},{id:2,customer_name:'Emeka (okada)',phone:'',amount:3000,due_date:off(3),paid:false,created_at:dayAt(-2,16,20)},{id:3,customer_name:'Aunty Ngozi',phone:'',amount:45000,due_date:off(-19),paid:false,created_at:dayAt(-30,9,40)}];
+ S.pays=[{id:1,debt_id:3,amount:20000,created_at:dayAt(-1,13,15)}];
+ S.sales=[];let id=1;
+ for(let i=14;i>=1;i--){const t=18000+((i*7919)%11)*2600;S.sales.push({id:id++,item:'Day sales',amount:Math.round(t*.55/100)*100,method:'Cash',sale_date:off(-i),created_at:dayAt(-i,12,0)});S.sales.push({id:id++,item:'Day sales',amount:Math.round(t*.45/100)*100,method:'Transfer',sale_date:off(-i),created_at:dayAt(-i,17,0)})}
+ [['Rice 5kg',8500,'Cash',9,30],['Indomie carton',9000,'Transfer',11,5],['Peak milk (3 tins)',4500,'Cash',12,40],['Bournvita, Emeka',6000,'Credit',14,10]].forEach(r=>S.sales.push({id:id++,item:r[0],amount:r[1],method:r[2],sale_date:off(0),created_at:dayAt(0,r[3],r[4])}));
+ S.ex=[{id:1,item:'Transport to market',category:'Transport',amount:1500,expense_date:off(0),created_at:dayAt(0,8,10)},{id:2,item:'Restock',category:'Restock',amount:25000,expense_date:off(-1),created_at:dayAt(-1,9,0)}];S.q=[];S.map={}}
+function checklist(){let dis=false;try{dis=localStorage.getItem('tl_cl')=='1'}catch(e){}
+ const it=[['Record your first sale',S.sales.length>0,'go','2'],['Add your first debt',S.debts.length>0,'go','1'],['Set a PIN lock',!!getPin(),'pinset',''],['Add your phone number',!!S.phone,'editprof','']];
+ const done=it.filter(x=>x[1]).length;if(dis||S.demo||done==it.length)return '';
+ return `<div class="item cl"><div class="l1"><span class="name">Get started</span><span class="m">${done} of ${it.length} done</span></div>`+it.map(x=>`<button class="cli ${x[1]?'done':''}" data-act="${x[2]}"${x[3]?` data-v="${x[3]}"`:''}><i>${x[1]?'✓':''}</i><span>${x[0]}</span></button>`).join('')+`<button class="del" style="margin-top:6px" data-act="clhide">Hide this</button></div>`}
 function sheetView(){
  if(S.sheet=='cust')return custSheet();
+ if(S.sheet=='setup')return `<div class="panel"><h1>Welcome! Tell us about your shop</h1><div class="shop">It takes 20 seconds. You can change it later in Edit profile.</div><label>Shop or business name</label><input data-d="ss" placeholder="Mama Chidi Provisions" value="${esc(S.d.ss)}"><label>Your full name</label><input data-d="so" placeholder="Chidi Okafor" autocomplete="name" value="${esc(S.d.so)}"><label>Phone number (optional)</label><input data-d="sp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.sp)}">${waChips()}<button class="full" data-act="savesetup">Save and continue</button><button class="full alt" data-act="skipsetup">Skip for now</button></div>`;
  if(S.sheet=='wipe')return `<div class="panel"><h1>Clear all my records</h1><div class="shop">This erases ALL your sales, debts, payments and expenses for good. Your login and profile stay. Download your reports first if you want to keep them.</div>`+pwField('wp','Type your password to confirm','current-password')+`<button class="full" style="background:var(--red);color:#fff" data-act="wipe">Erase everything</button><button class="full alt" data-act="close">Cancel</button></div>`;
  if(S.sheet=='guide')return guideSheet();
  if(S.sheet=='notif')return notifSheet();
@@ -396,6 +420,7 @@ function render(){
  if(S.recovery){$('app').innerHTML=recoveryView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  if(S.user&&!S.lockChecked){S.lockChecked=true;const pn=getPin();if(pn&&pn.u==S.user.id)S.locked=true}
  if(S.user&&S.locked){$('app').innerHTML=lockView();$('nav').innerHTML='';$('sheet').className='sheet';return}
+ if(S.user&&S.loaded&&!S.shop&&!S.setupSkip&&!S.demo&&S.sheet!='setup'){S.sheet='setup'}
  if(!S.user){$('app').innerHTML=authView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  $('app').innerHTML=banner()+[homeView,debtsView,salesView,tonightView,reportsView,expensesView][S.tab]();heroEye();
  $('nav').innerHTML='<button class="gfab" data-act="guide" aria-label="Help guide">?</button><div>'+[['Home',0],['Debts',1],['Sales',2],['Expenses',5],['Tonight',3],['Reports',4]].map(t=>`<button data-act="tab" data-v="${t[1]}" aria-selected="${S.tab==t[1]}">${navIcon(t[1])}<span>${t[0]}</span>${t[1]==1&&badgeN()?`<span class="nb">${badgeN()}</span>`:''}</button>`).join('')+'</div>';
@@ -405,16 +430,16 @@ async function reload(){await sync()}
 async function act(a,v){
  if(a=='mode'){S.mode=v||(S.mode=='in'?'up':'in');S.show=false;render()}
  else if(a=='eye'){S.show=!S.show;document.querySelectorAll('.pw input').forEach(i=>{i.type=S.show?'text':'password'});document.querySelectorAll('.eye').forEach(b=>{b.innerHTML=S.show?eyeOff:eyeOn})}
- else if(a=='signin'){const r=ok(await sb.auth.signInWithPassword({email:(S.d.email||'').trim(),password:S.d.password||''}));S.user=r.user;switchUser(r.user.id);S.d={method:'Cash'};await reload()}
+ else if(a=='signin'){const r=ok(await sb.auth.signInWithPassword({email:(S.d.email||'').trim(),password:S.d.password||''}));S.user=r.user;switchUser(r.user.id);S.loaded=false;S.setupSkip=false;S.d={method:'Cash'};await reload()}
  else if(a=='signup'){const e=(S.d.email||'').trim(),p=S.d.password||'';if(!S.d.agree){toast('Please tick the box to agree to the Terms and Privacy Policy');return}
-  if(!(S.d.owner||'').trim()||!(S.d.shop||'').trim()){toast('Add your full name and shop name');return}
+  
   if(!e||p.length<6){toast('Add your email and a password of 6 or more characters');return}
   if(p!==(S.d.password2||'')){toast('The two passwords do not match');return}
   const r=ok(await sb.auth.signUp({email:e,password:p}));
   if(!r.session){toast('Check your email to confirm, then sign in');S.mode='in';render();return}
-  S.user=r.user;switchUser(r.user.id);ok(await sb.from('shops').upsert({user_id:S.user.id,name:(S.d.shop||'').trim()||'My shop',owner_name:(S.d.owner||'').trim()||null}));S.d={method:'Cash'};await reload()}
+  S.user=r.user;switchUser(r.user.id);S.loaded=false;S.setupSkip=false;S.d={method:'Cash'};await reload()}
  else if(a=='sync'){sync();toast('Trying to send...')}
- else if(a=='out'){if(S.q.length&&!confirm(S.q.length+' entries have not been sent yet. Signing out will lose them. Sign out anyway?'))return;try{await sb.auth.signOut({scope:'local'})}catch(e){}S.user=null;S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.uid=null;S.ex=[];S.lockChecked=false;S.locked=false;try{localStorage.removeItem('tl_cache');localStorage.removeItem('tl_pin')}catch(e){}S.d={method:'Cash'};S.mode='start';S.show=false;render()}
+ else if(a=='out'){if(S.demo){return act('exitdemo')}if(S.q.length&&!confirm(S.q.length+' entries have not been sent yet. Signing out will lose them. Sign out anyway?'))return;try{await sb.auth.signOut({scope:'local'})}catch(e){}S.user=null;S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.uid=null;S.ex=[];S.lockChecked=false;S.locked=false;try{localStorage.removeItem('tl_cache');localStorage.removeItem('tl_pin')}catch(e){}S.d={method:'Cash'};S.mode='start';S.show=false;render()}
  else if(a=='tab'){S.tab=Number(v);S.rsel=0;render()}
  else if(a=='rp'){S.rp=v;S.rsel=0;render()}
  else if(a=='rb'){S.rsel=Number(v);render()}
@@ -440,8 +465,8 @@ async function act(a,v){
  else if(a=='send'){const n=waNum(S.d.rph),x=S.debts.find(z=>z.id==S.remId);if(n.length!=13){toast('Enter a valid Nigerian number');return}
   x.phone=S.d.rph.trim();enqueue({k:'upd',debt:x.id,row:{phone:x.phone}});sync();
   const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';
-  S.sheet=null;render();window.open('https://wa.me/'+n+'?text='+encodeURIComponent(msg),'_blank')}
- else if(a=='share'){const d=v||off(0);window.open('https://wa.me/?text='+encodeURIComponent(summaryText(d)),'_blank')}
+  S.sheet=null;render();waOpen(n,msg)}
+ else if(a=='share'){const d=v||off(0);waOpen('',summaryText(d))}
  else if(a=='dayprev'){const d=new Date(dayOf()+'T00:00:00');d.setDate(d.getDate()-1);S.day=iso(d);render()}
  else if(a=='daynext'){const d=new Date(dayOf()+'T00:00:00');d.setDate(d.getDate()+1);const n=iso(d);S.day=n>=off(0)?null:n;render()}
  else if(a=='go'){S.tab=Number(v);S.rsel=0;render()}
@@ -455,18 +480,18 @@ async function act(a,v){
   const tmp=tmpId(),row={item:it,category:c,amount:am,expense_date:day};
   S.ex.push({id:tmp,...row,created_at:new Date().toISOString()});enqueue({k:'exp',cid:newCid(),tmp,row});
   S.d.xi='';S.d.xa='';render();toast('Expense saved');sync()}
- else if(a=='delexp'){S.ex=S.ex.filter(e=>e.id!=v);if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delexp',id:v});persist();render();toast('Expense removed');sync()}
+ else if(a=='delexp'){flushPend();const idx=S.ex.findIndex(e=>e.id==v);if(idx<0)return;const rec=S.ex[idx];S.ex.splice(idx,1);render();const fin=()=>{if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delexp',id:v});persist();sync()};holdUndo('Expense removed',fin,()=>{if(!S.ex.some(x=>x.id==rec.id))S.ex.splice(Math.min(idx,S.ex.length),0,rec);render()})}
  else if(a=='editsale'){const s=S.sales.find(z=>z.id==v);if(!s)return;S.remId=v;S.d.sei=s.item;S.d.sea=String(s.amount);S.d.sed=s.sale_date;S.d.sem=s.method;S.sheet='editsale';render()}
  else if(a=='semethod'){S.d.sem=v;render()}
  else if(a=='savesale'){const s=S.sales.find(z=>z.id==S.remId);if(!s){S.sheet=null;render();return}
-  const it=(S.d.sei||'').trim(),am=Number(S.d.sea),dt=S.d.sed,m=S.d.sem||s.method;
-  if(!it||!(am>0)||!dt){toast('Add the item, amount and date');return}
+  const it=(S.d.sei||'').trim()||'Sale',am=Number(S.d.sea),dt=S.d.sed,m=S.d.sem||s.method;
+  if(!(am>0)||!dt){toast('Add the amount and date');return}
   if(dt>off(0)){toast('The date cannot be in the future');return}
   const row={item:it,amount:am,method:m,sale_date:dt};Object.assign(s,row);
   const qi=S.q.find(i=>i.k=='sale'&&i.tmp==s.id);if(qi){Object.assign(qi.row,row);persist()}else enqueue({k:'updsale',id:s.id,row});
   S.sheet=null;render();toast('Sale updated');sync()}
  else if(a=='rcpt'){const s=S.sales.find(z=>z.id==v);if(!s)return;S.rc={text:saleReceipt(s)};S.d.rcp='';S.sheet='rcpt';render()}
- else if(a=='sendrc'){const n=waNum(S.d.rcp);window.open('https://wa.me/'+(n.length==13?n:'')+'?text='+encodeURIComponent((S.rc&&S.rc.text)||''),'_blank')}
+ else if(a=='sendrc'){const n=waNum(S.d.rcp);waOpen(n.length==13?n:'',(S.rc&&S.rc.text)||'')}
  else if(a=='pinset'){S.d.pin='';S.d.pin2='';S.sheet='pinset';render()}
  else if(a=='pinsave'){const p=S.d.pin||'';if(!/^\d{4}$/.test(p)){toast('Use exactly 4 digits');return}if(p!==(S.d.pin2||'')){toast('The two PINs do not match');return}
   const salt=newCid(),h=await pinHash(p,salt);localStorage.setItem('tl_pin',JSON.stringify({s:salt,h:h,u:(S.user&&S.user.id)||S.uid}));S.d.pin='';S.d.pin2='';S.sheet=null;render();toast('PIN lock is on')}
@@ -491,7 +516,7 @@ async function act(a,v){
   if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delpay',id:v});
   if(x&&x.paid&&balOf(x)>0){x.paid=false;x.paid_at=null;enqueue({k:'upd',debt:x.id,row:{paid:false,paid_at:null}})}
   persist();render();toast('Payment removed');sync()}
- else if(a=='wipeopen'){S.d.wp='';S.show=false;S.sheet='wipe';render()}
+ else if(a=='wipeopen'){if(S.demo){toast('Not available in the demo');return}S.d.wp='';S.show=false;S.sheet='wipe';render()}
  else if(a=='wipe'){
   if(!navigator.onLine){toast('Connect to the network first');return}
   const pw=S.d.wp||'';if(!pw){toast('Type your password');return}
@@ -508,28 +533,36 @@ async function act(a,v){
  else if(a=='seenall'){const sn=seenLoad();notifs().urgent.forEach(x=>{sn.k[nkey(x)]=1});seenSave(sn);render();toast('Marked as seen')}
  else if(a=='guide'){S.gq='';S.sheet='guide';render()}
  else if(a=='hide'){try{localStorage.setItem('tl_hide',heroHid()?'0':'1')}catch(e){}render()}
+ else if(a=='wapref'){try{localStorage.setItem('tl_wa',v)}catch(e){}render()}
+ else if(a=='undo'){if(S.pend){clearTimeout(S.pend.t);const u=S.pend.undo;S.pend=null;hideU();u()}}
+ else if(a=='clhide'){try{localStorage.setItem('tl_cl','1')}catch(e){}render()}
+ else if(a=='demo'){demoLoad();S.user={id:'demo',email:'demo@tradelogng.app',created_at:new Date().toISOString()};S.demo=true;S.loaded=true;S.shop='Mama Chidi Provisions (demo)';S.owner='Chidi Okafor';S.phone='';S.photo='';S.tab=0;S.d={method:'Cash'};render()}
+ else if(a=='exitdemo'){S.demo=false;S.user=null;S.debts=[];S.pays=[];S.sales=[];S.ex=[];S.q=[];S.map={};S.shop='';S.owner='';S.phone='';S.photo='';S.loaded=false;S.d={method:'Cash'};S.mode='up';S.tab=0;render()}
+ else if(a=='savesetup'){const sh=(S.d.ss||'').trim(),o=(S.d.so||'').trim(),ph=(S.d.sp||'').trim();if(!sh){toast('Add your shop name');return}
+  S.shop=sh;S.owner=o;S.phone=ph;enqueue({k:'prof',row:{name:sh,owner_name:o||null,phone:ph||null}});S.sheet=null;render();toast('Welcome to TradeLog NG');sync()}
+ else if(a=='skipsetup'){S.setupSkip=true;S.sheet=null;render()}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
- else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();window.open('https://wa.me/'+waNum(x.phone)+'?text='+encodeURIComponent(msg),'_blank')}
+ else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();waOpen(waNum(x.phone),msg)}
  else if(a=='exp'){const t=off(0);
   if(v=='sales'){const r=S.sales.slice().sort((p,q)=>p.sale_date<q.sale_date?1:p.sale_date>q.sale_date?-1:0).map(z=>[z.sale_date,z.item,z.amount,z.method]);downloadCsv('tradelog-sales-'+t+'.csv',[['Date','Item','Amount (NGN)','Paid by']].concat(r))}
   else if(v=='debts'){const r=S.debts.map(x=>[x.customer_name,x.phone||'',x.created_at?iso(new Date(x.created_at)):'',x.due_date,x.amount,paidOf(x),balOf(x),balOf(x)==0?'Paid':dayDiff(x.due_date)<0?'Overdue':'Open']);downloadCsv('tradelog-debts-'+t+'.csv',[['Customer','Phone','Date recorded','Due date','Total owed (NGN)','Paid so far (NGN)','Balance (NGN)','Status']].concat(r))}
   else{const r=S.pays.slice().reverse().map(p=>{const x=debtOf(p.debt_id);return [payDay(p),x?x.customer_name:'Customer',p.amount]});downloadCsv('tradelog-payments-'+t+'.csv',[['Date','Customer','Amount (NGN)']].concat(r))}
   toast('File saved. Check your Downloads.')}
  else if(a=='pmethod'){S.d.pm=v;render()}
- else if(a=='addsale'){const it=(S.d.item||'').trim(),am=Number(S.d.amount),m=S.d.method||'Cash',day=dayOf();
-  if(!it||!(am>0)){toast('Add what was sold and the total price');return}
+ else if(a=='addsale'){const it=(S.d.item||'').trim()||'Sale',am=Number(S.d.amount),m=S.d.method||'Cash',day=dayOf();
+  if(!(am>0)){toast('Type the amount');return}
   const addSale=(item,amt,meth)=>{const tmp=tmpId(),row={item:item,amount:amt,method:meth,sale_date:day};S.sales.push({id:tmp,...row,created_at:new Date().toISOString()});enqueue({k:'sale',cid:newCid(),tmp,row})};
   if(m=='Credit'){const c=(S.d.cust||'').trim(),pn=Number(S.d.pn)||0,pm=S.d.pm||'Cash';
    if(!c){toast('Add the customer who owes');return}
    if(pn<0||pn>=am){toast(pn>=am?'Paid now must be less than the total. Use Cash or Transfer instead.':'Enter a valid amount');return}
-   const owe=am-pn,row={customer_name:c,phone:(S.d.sph||'').trim()||null,amount:owe,due_date:off(7)},tmp=tmpId();
+   const owe=am-pn,row={customer_name:c,phone:(S.d.sph||'').trim()||null,amount:owe,due_date:S.d.cdue||off(7)},tmp=tmpId();
    S.debts.push({id:tmp,paid:false,paid_at:null,...row,created_at:new Date().toISOString()});enqueue({k:'debt',cid:newCid(),tmp,row});
    if(pn>0)addSale(it+', '+c+' (part paid)',pn,pm);
    addSale(it+', '+c,owe,'Credit')}
   else addSale(it,am,m);
   S.d={method:m};render();toast(m=='Credit'?'Saved. The balance is in Debts.':'Sale added');sync()}
- else if(a=='delsale'){S.sales=S.sales.filter(s=>s.id!=v);if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delsale',id:v});persist();render();toast('Sale removed');sync()}
+ else if(a=='delsale'){flushPend();const idx=S.sales.findIndex(s=>s.id==v);if(idx<0)return;const rec=S.sales[idx];S.sales.splice(idx,1);render();const fin=()=>{if(isTmp(v)&&!S.map[v])S.q=S.q.filter(i=>i.tmp!=v);else S.q.push({k:'delsale',id:v});persist();sync()};holdUndo('Sale removed',fin,()=>{if(!S.sales.some(x=>x.id==rec.id))S.sales.splice(Math.min(idx,S.sales.length),0,rec);render()})}
 }
 document.addEventListener('input',e=>{const t=e.target,k=t.dataset.d,sk=t.dataset.s;
  if(k){S.d[k]=t.type=='checkbox'?t.checked:t.value;if(k=='pn'||k=='amount'){const b=$('bal');if(b)b.textContent=balText()}}
@@ -543,6 +576,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]
 sb.auth.onAuthStateChange(ev=>{if(ev=='PASSWORD_RECOVERY'){S.recovery=true;render()}});
 if(/type=recovery/.test(location.hash))S.recovery=true;
 document.addEventListener('visibilitychange',()=>{if(document.hidden){S.hiddenAt=Date.now()}else if(S.user&&getPin()&&S.hiddenAt&&Date.now()-S.hiddenAt>60000){S.locked=true;S.d.pin='';render()}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)flushPend()});
 window.addEventListener('online',()=>sync());
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
 setInterval(()=>{if(S.user&&(S.q.length||S.offline))sync()},30000);
