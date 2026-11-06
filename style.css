@@ -161,3 +161,4 @@ nav button.gfab{position:fixed;left:max(16px,calc(50% - 199px));bottom:calc(84px
 .cl .cli i{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:13px}
 .cl .cli.done i{background:var(--green);border-color:var(--green);color:var(--on)}
 .cl .cli.done span{text-decoration:line-through;color:var(--mute)}
+@media print{body{zoom:1!important}}

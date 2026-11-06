@@ -10,7 +10,7 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const waNum=s=>{const d=String(s||'').replace(/\D/g,'');if(d.indexOf('234')==0)return d;if(d[0]=='0')return '234'+d.slice(1);if(d.length==10)return '234'+d;return d};
 const fmtD=s=>new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 const fmtK=n=>n>=1000?Math.round(n/1000)+'k':String(n);
-const S={user:null,shop:'',owner:'',phone:'',photo:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,day:null,fd:'',fs:'',ff:'all',sent:{},ex:[],tab:0,sheet:null,mode:'start',show:false,busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
+const S={user:null,shop:'',owner:'',phone:'',photo:'',debts:[],pays:[],sales:[],q:[],map:{},uid:null,offline:false,syncing:false,again:false,recovery:false,day:null,fd:'',fs:'',ff:'all',sent:{},ex:[],bad:[],tab:0,sheet:null,mode:'start',show:false,busy:false,d:{method:'Cash'},rp:'day',rsel:0,remId:null};
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2200)}
 function ok(r){if(r.error)throw r.error;return r.data}
 async function fetchAll(build){let out=[],from=0;for(;;){const data=ok(await build().range(from,from+999));out=out.concat(data);if(data.length<1000)break;from+=1000}return out}
@@ -18,11 +18,11 @@ const isNet=e=>{const m=String((e&&e.message)||e||'');return !navigator.onLine||
 const isTmp=id=>typeof id=='string'&&id.charAt(0)=='n';
 const newCid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2);
 const tmpId=()=>'n'+newCid();
-function persist(){try{if(S.demo)return;if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,photo:S.photo,debts:S.debts,pays:S.pays,sales:S.sales,ex:S.ex,q:S.q,map:S.map}))}catch(e){}}
+function persist(){try{if(S.demo)return;if(S.user)S.uid=S.user.id;localStorage.setItem('tl_cache',JSON.stringify({uid:S.uid,shop:S.shop,owner:S.owner,phone:S.phone,photo:S.photo,debts:S.debts,pays:S.pays,sales:S.sales,ex:S.ex,q:S.q,bad:S.bad,map:S.map}))}catch(e){}}
 const AT=it=>it.at?{created_at:it.at}:{};
 function enqueue(it){if(!it.at)it.at=new Date().toISOString();S.q.push(it);persist()}
-function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.owner=c.owner||'';S.phone=c.phone||'';S.photo=c.photo||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};S.ex=c.ex||[];return true}return false}
-function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.owner='';S.phone='';S.photo='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.ex=[]}}
+function useCache(c,uid){if(c&&c.uid&&c.uid==uid){S.uid=uid;S.shop=c.shop||'';S.owner=c.owner||'';S.phone=c.phone||'';S.photo=c.photo||'';S.debts=c.debts||[];S.pays=c.pays||[];S.sales=c.sales||[];S.q=c.q||[];S.map=c.map||{};S.ex=c.ex||[];S.bad=c.bad||[];return true}return false}
+function switchUser(uid){let c=null;try{c=JSON.parse(localStorage.getItem('tl_cache')||'null')}catch(e){}if(!useCache(c,uid)){S.uid=uid;S.shop='';S.owner='';S.phone='';S.photo='';S.debts=[];S.pays=[];S.sales=[];S.q=[];S.map={};S.ex=[];S.bad=[]}}
 function banner(){if(S.demo)return '<button class="sync" data-act="exitdemo">You are trying the demo. Nothing is saved. Tap here to create your free account.</button>';const n=S.q.length;if(!n&&!S.offline)return '';return `<button class="sync" data-act="sync">${n?n+(n==1?' entry is':' entries are')+' saved on this phone and waiting to send. Tap to retry.':'No network. Showing records saved on this phone.'}</button>`}
 function softRender(){const a=document.activeElement;if(a&&a.tagName=='INPUT')return;render()}
 async function insIdem(t,row){const r=await sb.from(t).insert(row).select().single();
@@ -57,7 +57,7 @@ async function sync(){
     catch(err){
      if(isNet(err))throw err;
      it.n=(it.n||0)+1;persist();
-     if(/^(22|23)/.test(String(err.code||''))||it.n>=3){S.q=S.q.filter(i=>i!==it);persist();toast('One entry could not be saved')}
+     if(/^(22|23)/.test(String(err.code||''))||it.n>=3){S.q=S.q.filter(i=>i!==it);(S.bad=S.bad||[]).push(it);persist();toast('One entry could not be saved. See the bell.')}
      else throw err}
    }
    if(await loadAll()){S.map={};persist()}
@@ -149,7 +149,7 @@ function salesView(){const d=dayOf(),m=S.d.method||'Cash',pm=S.d.pm||'Cash',isT=
  h+=`<div class="daybar"><button data-act="dayprev" aria-label="Previous day">${chevL}</button><label class="dpick">📅 <b>${dayLabel(d)}</b><input type="date" data-day="1" max="${off(0)}" value="${d}"></label><button data-act="daynext" aria-label="Next day"${isT?' disabled':''}>${chevR}</button></div>`;
  h+=`<div class="hero"><small>Total sales ${isT?'today':'on '+dayLabel(d)}</small><div class="big">${naira(sumS(null,d))}</div><div class="row"><span>Cash ${naira(sumS('Cash',d))}</span><span>Transfer ${naira(sumS('Transfer',d))}</span><span>Credit ${naira(sumS('Credit',d))}</span></div><div class="row"><span>Debts collected ${naira(colOf(d))}</span></div></div><button class="full alt" style="margin-top:10px" data-act="share" data-v="${d}">Share this day on WhatsApp</button>`;
  h+=`<div class="item"><label style="margin-top:0">Amount (₦)</label><input data-d="amount" type="number" inputmode="numeric" placeholder="e.g. 3500" value="${esc(S.d.amount)}"><label>What was sold <span class="m">(optional)</span></label><input data-d="item" placeholder="e.g. Garri 2 paints" value="${esc(S.d.item)}"><label>Paid by</label><div class="chips">`+['Cash','Transfer','Credit'].map(x=>`<button class="chip" data-act="method" data-v="${x}" aria-pressed="${m==x}">${x}</button>`).join('')+'</div>';
- if(m=='Credit')h+=`<label>Customer who owes</label><input data-d="cust" placeholder="e.g. Mrs. Bisi" value="${esc(S.d.cust)}"><label>Their WhatsApp number (optional)</label><input data-d="sph" type="tel" placeholder="0803 123 4567" value="${esc(S.d.sph)}"><label>Date they will pay</label><input data-d="cdue" type="date" min="${off(0)}" value="${esc(S.d.cdue||off(7))}"><label>Paid now (₦). Leave empty if nothing yet</label><input data-d="pn" type="number" inputmode="numeric" placeholder="0" value="${esc(S.d.pn)}"><label>Paid now by</label><div class="chips">`+['Cash','Transfer'].map(x=>`<button class="chip" data-act="pmethod" data-v="${x}" aria-pressed="${pm==x}">${x}</button>`).join('')+`</div><div class="m" id="bal" style="margin-top:8px">${balText()}</div>`;
+ if(m=='Credit')h+=`<label>Customer who owes</label><input data-d="cust" list="custnames" autocomplete="off" placeholder="e.g. Mrs. Bisi" value="${esc(S.d.cust)}"><label>Their WhatsApp number (optional)</label><input data-d="sph" type="tel" placeholder="0803 123 4567" value="${esc(S.d.sph)}"><label>Date they will pay</label><input data-d="cdue" type="date" min="${off(0)}" value="${esc(S.d.cdue||off(7))}"><label>Paid now (₦). Leave empty if nothing yet</label><input data-d="pn" type="number" inputmode="numeric" placeholder="0" value="${esc(S.d.pn)}"><label>Paid now by</label><div class="chips">`+['Cash','Transfer'].map(x=>`<button class="chip" data-act="pmethod" data-v="${x}" aria-pressed="${pm==x}">${x}</button>`).join('')+`</div><div class="m" id="bal" style="margin-top:8px">${balText()}</div>`;
  h+='<button class="full" data-act="addsale">Add sale</button></div>';
  h+=`<input class="search" data-s="fs" type="search" placeholder="Search all sales by item or customer" value="${esc(S.fs)}">`;
  h+=`<div id="slist">${salesList()}</div>`;
@@ -183,7 +183,7 @@ function homeView(){const t=off(0),hr=new Date().getHours(),g=hr<12?'Good mornin
  h+=`<div class="sum"><div class="r"><span>Total owed to you</span><b>${naira(owed)}</b></div><div class="r"><span>Spent today</span><b>${naira(expSum(t))}</b></div><div class="r"><span>Profit today</span><b class="${sumS(null,t)-expSum(t)<0?'neg':''}">${nm(sumS(null,t)-expSum(t))}</b></div><div class="r"><span>Customers owing</span><b>${new Set(o.map(x=>ck(x.customer_name))).size}</b></div><div class="r"><span>Overdue customers</span><b>${late.length}</b></div></div>`;
  h+=`<button class="full" data-act="go" data-v="2">Record a sale</button><button class="full alt" data-act="adddebt">Add a debt</button><button class="full alt" data-act="go" data-v="5">Add an expense</button>`;
  if(late.length)h+=`<button class="full" style="background:var(--wa);color:#06260f" data-act="rall">Remind overdue (${late.length})</button>`;
- h+=`<h2 class="sec">About</h2><a class="full alt" style="display:block;text-align:center;text-decoration:none;border-radius:10px;font-weight:600" href="privacy.html" target="_blank">Privacy policy and terms</a><h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="color:var(--red)" data-act="wipeopen">Clear all my records</button><button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
+ h+=`<h2 class="sec">About</h2><a class="full alt" style="display:block;text-align:center;text-decoration:none;border-radius:10px;font-weight:600" href="privacy.html" target="_blank">Privacy policy and terms</a><h2 class="sec">Display</h2><label style="margin-top:0">Text size</label><div class="chips">${[['1','Normal'],['1.15','Large'],['1.3','Extra large']].map(c=>`<button class="chip" data-act="fs" data-v="${c[0]}" aria-pressed="${fsNow()==c[0]}">${c[1]}</button>`).join('')}</div><button class="full alt" data-act="feedback">Send feedback on WhatsApp</button><h2 class="sec">Security</h2><button class="full alt" data-act="pinset">${getPin()?'Change PIN':'Set PIN lock'}</button>${getPin()?'<button class="full alt" data-act="pinoff">Turn off PIN lock</button>':''}<button class="full alt" style="color:var(--red)" data-act="wipeopen">Clear all my records</button><button class="full alt" style="margin-top:28px" data-act="out">Sign out</button>`;
  return h}
 function profSheet(){return `<div class="panel"><h1>Edit profile</h1><label>Your full name</label><input data-d="po" placeholder="Chidi Okafor" value="${esc(S.d.po)}"><label>Shop or business name</label><input data-d="ps" value="${esc(S.d.ps)}"><label>Phone number</label><input data-d="pp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.pp)}">${waChips()}${goodPhoto()?'<button class="full alt" data-act="rmphoto">Remove photo</button>':''}<button class="full" data-act="saveprof">Save profile</button><button class="full alt" data-act="close">Cancel</button></div>`}
 const dueFilter=x=>{const k=dayDiff(x.due_date);return S.ff=='late'?k<0:S.ff=='soon'?(k>=0&&k<=7):true};
@@ -317,7 +317,7 @@ function notifs(){const late=[],today=[],soon=[];openD().forEach(x=>{const k=day
 const nkey=x=>x.id+':'+(dayDiff(x.due_date)<0?'late':'today');
 const markSeen=x=>{const sn=seenLoad();sn.k[nkey(x)]=1;seenSave(sn)};
 function badgeN(){const n=notifs(),sn=seenLoad();return n.urgent.filter(x=>!sn.k[nkey(x)]).length}
-function bellBtn(){const b=badgeN();return `<button class="bell" data-act="bell" aria-label="Notifications">${bellSvg}${b?`<span class="badge">${b>99?'99+':b}</span>`:''}</button>`}
+function bellBtn(){const b=badgeN()+(S.bad||[]).length;return `<button class="bell" data-act="bell" aria-label="Notifications">${bellSvg}${b?`<span class="badge">${b>99?'99+':b}</span>`:''}</button>`}
 function notifSheet(){const n=notifs(),sn=seenLoad();
  const row=(x,u)=>{const k=dayDiff(x.due_date),st=k<0?-k+(k==-1?' day late':' days late'):k==0?'Due today':'Due in '+k+(k==1?' day':' days'),seen=u&&sn.k[nkey(x)];
   return `<div class="item"${seen?' style="opacity:.6"':''}><div class="l1"><span class="name">${esc(x.customer_name)}</span><span class="amt">${naira(balOf(x))}</span></div><div class="l1"><span class="m">${st}${seen?' · seen':''}</span><button class="b1" style="flex:none" data-act="nremind" data-v="${x.id}">Remind</button></div></div>`};
@@ -325,7 +325,8 @@ function notifSheet(){const n=notifs(),sn=seenLoad();
  if(n.urgent.length)h+='<h2 class="sec">Needs attention ('+n.urgent.length+')</h2>'+n.urgent.map(x=>row(x,1)).join('');
  if(n.soon.length)h+='<h2 class="sec">Coming up in 3 days ('+n.soon.length+')</h2>'+n.soon.map(x=>row(x,0)).join('');
  if(S.q.length)h+=`<h2 class="sec">Waiting to send</h2><div class="item"><div class="m">${S.q.length} ${S.q.length==1?'entry is':'entries are'} saved on this phone and not sent yet.</div><button class="b2" style="margin-top:8px;width:100%" data-act="sync">Try sending now</button></div>`;
- if(!n.urgent.length&&!n.soon.length&&!S.q.length)h+='<div class="empty">You are all caught up. No debts are due soon.</div>';
+ if((S.bad||[]).length){h+='<h2 class="sec">Problem entries ('+S.bad.length+')</h2><div class="m" style="margin-top:6px">These could not be saved. Try again, or delete them.</div>'+S.bad.map((it,i)=>`<div class="item"><div class="name">${esc(descItem(it))}</div><div class="acts"><button class="b1" data-act="badretry" data-v="${i}">Try again</button><button class="b2" data-act="baddel" data-v="${i}">Delete</button></div></div>`).join('')}
+ if(!n.urgent.length&&!n.soon.length&&!S.q.length&&!(S.bad||[]).length)h+='<div class="empty">You are all caught up. No debts are due soon.</div>';
  if(n.urgent.length)h+='<button class="full alt" data-act="seenall">Mark all as seen</button>';
  return h+'<button class="full alt" data-act="close">Close</button></div>'}
 const backSvg='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
@@ -360,6 +361,9 @@ const GUIDE=[
 {q:"What if there is no network?",s:["Keep working as normal. Everything is saved on your phone.","A yellow bar shows how many entries are waiting to send. They send by themselves when the network returns. You can tap the bar to try now.","Do not sign out or clear your browser data while that yellow bar is showing, or the unsent entries are lost."],t:"You must sign in once with network before you can work offline."},
 {q:"How do I lock the app with a PIN?",s:["Open **Home** and tap **Set PIN lock**.","Type a 4-digit PIN twice, then tap **Save PIN**.","The app asks for the PIN when you open it and after you leave it for about a minute."],t:"If you forget it, tap **Forgot PIN? Sign out** and sign in again with your password. Unsent entries would be lost, so connect to the network first."},
 {q:"How do I change my name, shop name or picture?",s:["Open **Home**.","Tap the round picture to choose a new photo.","Tap **Edit profile** to change your name, shop name or phone number."]},
+{q:"Some entries show as problem entries in the bell",s:["Tap the **bell** at the top.","Under **Problem entries**, tap **Try again** once you have network.","If it still fails, tap **Delete** and record that entry again."],t:"This is rare. It can happen if an entry depends on another one that never saved."},
+{q:"The writing is too small",s:["Open **Home** and scroll down to **Display**.","Choose **Large** or **Extra large** under **Text size**."]},
+{q:"How do I send feedback or report a problem?",s:["Open **Home** and scroll down.","Tap **Send feedback on WhatsApp**.","Write what happened and send it."],t:"Say which screen you were on and what you tapped. A screenshot helps a lot."},
 {q:"I forgot my password",s:["On the log in page, type your email.","Tap **Forgot password?**.","Open the email we send you and tap the link.","Type your new password twice and tap **Save new password**."],t:"If the email does not arrive after a few minutes, check your spam folder."},
 {q:"How do I put the app on my phone?",s:["Open the app link in **Chrome**.","Tap the **⋮** menu at the top right.","Tap **Install and create shortcut** (or **Add to Home screen**), then confirm.","Open it from the new icon on your home screen."]},
 {q:"How do I clear everything and start fresh?",s:["Download any reports you want to keep first.","Open **Home**, scroll down and tap **Clear all my records**.","Type your password to confirm. Your login and profile stay."],t:"This cannot be undone."}
@@ -398,6 +402,20 @@ function checklist(){let dis=false;try{dis=localStorage.getItem('tl_cl')=='1'}ca
  const it=[['Record your first sale',S.sales.length>0,'go','2'],['Add your first debt',S.debts.length>0,'go','1'],['Set a PIN lock',!!getPin(),'pinset',''],['Add your phone number',!!S.phone,'editprof','']];
  const done=it.filter(x=>x[1]).length;if(dis||S.demo||done==it.length)return '';
  return `<div class="item cl"><div class="l1"><span class="name">Get started</span><span class="m">${done} of ${it.length} done</span></div>`+it.map(x=>`<button class="cli ${x[1]?'done':''}" data-act="${x[2]}"${x[3]?` data-v="${x[3]}"`:''}><i>${x[1]?'✓':''}</i><span>${x[0]}</span></button>`).join('')+`<button class="del" style="margin-top:6px" data-act="clhide">Hide this</button></div>`}
+const FB_NUM='2349061590696';
+const fsNow=()=>{try{return String(Number(localStorage.getItem('tl_fs')||1)||1)}catch(e){return '1'}};
+function applyFS(){try{document.body.style.zoom=Number(localStorage.getItem('tl_fs')||1)||1}catch(e){}}
+function canonName(n){const k=x=>ck(x).replace(/[.,]/g,''),t=k(n);const f=S.debts.find(x=>k(x.customer_name)==t);return f?f.customer_name:n}
+function nameList(){const seen={},o=[];S.debts.forEach(x=>{const k=ck(x.customer_name);if(!seen[k]){seen[k]=1;o.push(x.customer_name)}});return '<datalist id="custnames">'+o.slice(-200).map(n=>'<option value="'+esc(n)+'">').join('')+'</datalist>'}
+function descItem(it){const r=it.row||{},m=x=>naira(x);
+ if(it.k=='debt')return 'Debt: '+r.customer_name+', '+m(r.amount);
+ if(it.k=='sale')return 'Sale: '+r.item+', '+m(r.amount);
+ if(it.k=='pay')return 'Payment received, '+m(r.amount);
+ if(it.k=='exp')return 'Expense: '+r.item+', '+m(r.amount);
+ if(it.k=='upd')return 'Change to a debt';
+ if(it.k=='updsale')return 'Change to a sale';
+ if(it.k=='prof')return 'Profile change';
+ return 'Removal of a record'}
 function sheetView(){
  if(S.sheet=='cust')return custSheet();
  if(S.sheet=='setup')return `<div class="panel"><h1>Welcome! Tell us about your shop</h1><div class="shop">It takes 20 seconds. You can change it later in Edit profile.</div><label>Shop or business name</label><input data-d="ss" placeholder="Mama Chidi Provisions" value="${esc(S.d.ss)}"><label>Your full name</label><input data-d="so" placeholder="Chidi Okafor" autocomplete="name" value="${esc(S.d.so)}"><label>Phone number (optional)</label><input data-d="sp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.sp)}">${waChips()}<button class="full" data-act="savesetup">Save and continue</button><button class="full alt" data-act="skipsetup">Skip for now</button></div>`;
@@ -412,17 +430,17 @@ function sheetView(){
  if(S.sheet=='rall')return rallSheet();
  if(S.sheet=='pay'){const x=S.debts.find(z=>z.id==S.remId);if(!x)return '';return `<div class="panel"><h1>Record payment</h1><div class="shop">${esc(x.customer_name)} still owes ${naira(balOf(x))}</div><label>Amount paid (₦)</label><input data-d="pa" type="number" inputmode="numeric" value="${esc(S.d.pa)}"><button class="full" data-act="savepay">Save payment</button><button class="full alt" data-act="close">Cancel</button></div>`}
  if(S.sheet=='edit'){const x=S.debts.find(z=>z.id==S.remId);if(!x)return '';return `<div class="panel"><h1>Edit debt</h1><label>Customer name</label><input data-d="en" value="${esc(S.d.en)}"><label>WhatsApp number</label><input data-d="ep" type="tel" value="${esc(S.d.ep)}"><label>Total amount (₦)</label><input data-d="ea" type="number" inputmode="numeric" value="${esc(S.d.ea)}"><label>Due date</label><input data-d="ed" type="date" value="${esc(S.d.ed)}"><button class="full" data-act="saveedit">Save changes</button><button class="full alt" data-act="close">Cancel</button><button class="full" style="background:var(--redbg);color:var(--red)" data-act="deldebt">Delete this debt</button></div>`}
- if(S.sheet=='debt')return `<div class="panel"><h1>Add debt</h1><label>Customer name</label><input data-d="dn" value="${esc(S.d.dn)}"><label>Customer WhatsApp number</label><input data-d="dp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.dp)}"><label>Amount owed (₦)</label><input data-d="da" type="number" inputmode="numeric" value="${esc(S.d.da)}"><label>Due date</label><input data-d="dd" type="date" value="${esc(S.d.dd)}"><button class="full" data-act="savedebt">Save debt</button><button class="full alt" data-act="close">Cancel</button></div>`;
+ if(S.sheet=='debt')return `<div class="panel"><h1>Add debt</h1><label>Customer name</label><input data-d="dn" list="custnames" autocomplete="off" value="${esc(S.d.dn)}"><label>Customer WhatsApp number</label><input data-d="dp" type="tel" placeholder="0803 123 4567" value="${esc(S.d.dp)}"><label>Amount owed (₦)</label><input data-d="da" type="number" inputmode="numeric" value="${esc(S.d.da)}"><label>Due date</label><input data-d="dd" type="date" value="${esc(S.d.dd)}"><button class="full" data-act="savedebt">Save debt</button><button class="full alt" data-act="close">Cancel</button></div>`;
  if(S.sheet=='remind'){const x=S.debts.find(z=>z.id==S.remId);if(!x)return '';return `<div class="panel"><h1>Send reminder</h1><div class="wa">Hello ${esc(x.customer_name.split(' (')[0])}, this is a reminder of ${naira(balOf(x))} owed to ${esc(S.shop||'us')}. Thank you.</div><label>Customer WhatsApp number</label><input data-d="rph" type="tel" placeholder="0803 123 4567" value="${esc(S.d.rph)}"><button class="full" style="background:var(--wa);color:#06260f" data-act="send">Send on WhatsApp</button><button class="full alt" data-act="close">Close</button></div>`}
  return ''}
 function recoveryView(){return `<div class="auth"><div class="brand">TradeLog NG</div><h1>Set a new password</h1>`+pwField('np','New password (6 or more characters)','new-password')+pwField('np2','Verify new password','new-password')+`<button class="full" data-act="newpass">Save new password</button></div>`}
-function render(){
+function render(){applyFS();
  if(S.recovery){$('app').innerHTML=recoveryView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  if(S.user&&!S.lockChecked){S.lockChecked=true;const pn=getPin();if(pn&&pn.u==S.user.id)S.locked=true}
  if(S.user&&S.locked){$('app').innerHTML=lockView();$('nav').innerHTML='';$('sheet').className='sheet';return}
  if(S.user&&S.loaded&&!S.shop&&!S.setupSkip&&!S.demo&&S.sheet!='setup'){S.sheet='setup'}
  if(!S.user){$('app').innerHTML=authView();$('nav').innerHTML='';$('sheet').className='sheet';return}
- $('app').innerHTML=banner()+[homeView,debtsView,salesView,tonightView,reportsView,expensesView][S.tab]();heroEye();
+ $('app').innerHTML=banner()+[homeView,debtsView,salesView,tonightView,reportsView,expensesView][S.tab]()+nameList();heroEye();
  $('nav').innerHTML='<button class="gfab" data-act="guide" aria-label="Help guide">?</button><div>'+[['Home',0],['Debts',1],['Sales',2],['Expenses',5],['Tonight',3],['Reports',4]].map(t=>`<button data-act="tab" data-v="${t[1]}" aria-selected="${S.tab==t[1]}">${navIcon(t[1])}<span>${t[0]}</span>${t[1]==1&&badgeN()?`<span class="nb">${badgeN()}</span>`:''}</button>`).join('')+'</div>';
  $('sheet').innerHTML=sheetView();$('sheet').className='sheet'+(S.sheet?' on':'');
 }
@@ -446,7 +464,7 @@ async function act(a,v){
  else if(a=='method'){S.d.method=v;render()}
  else if(a=='adddebt'){S.d.dn='';S.d.dp='';S.d.da='';S.d.dd=off(7);S.sheet='debt';render()}
  else if(a=='close'){S.sheet=null;render()}
- else if(a=='savedebt'){const n=(S.d.dn||'').trim(),am=Number(S.d.da);if(!n||!(am>0)||!S.d.dd){toast('Add name, amount and due date');return}
+ else if(a=='savedebt'){const n=canonName((S.d.dn||'').trim()),am=Number(S.d.da);if(!n||!(am>0)||!S.d.dd){toast('Add name, amount and due date');return}
   const tmp=tmpId(),row={customer_name:n,phone:(S.d.dp||'').trim()||null,amount:am,due_date:S.d.dd};S.debts.push({id:tmp,paid:false,paid_at:null,...row,created_at:new Date().toISOString()});enqueue({k:'debt',cid:newCid(),tmp,row});S.sheet=null;render();toast('Debt saved');sync()}
  else if(a=='cust'){S.cust=v;S.sheet='cust';render()}
  else if(a=='pay'){const x=S.debts.find(z=>z.id==v);S.remId=v;S.d.pa=String(balOf(x));S.sheet='pay';render()}
@@ -541,6 +559,10 @@ async function act(a,v){
  else if(a=='savesetup'){const sh=(S.d.ss||'').trim(),o=(S.d.so||'').trim(),ph=(S.d.sp||'').trim();if(!sh){toast('Add your shop name');return}
   S.shop=sh;S.owner=o;S.phone=ph;enqueue({k:'prof',row:{name:sh,owner_name:o||null,phone:ph||null}});S.sheet=null;render();toast('Welcome to TradeLog NG');sync()}
  else if(a=='skipsetup'){S.setupSkip=true;S.sheet=null;render()}
+ else if(a=='badretry'){const it=(S.bad||[])[Number(v)];if(!it)return;S.bad.splice(Number(v),1);it.n=0;S.q.push(it);persist();render();toast('Trying again...');sync()}
+ else if(a=='baddel'){if(!confirm('Delete this entry for good?'))return;(S.bad||[]).splice(Number(v),1);persist();render()}
+ else if(a=='fs'){try{localStorage.setItem('tl_fs',v)}catch(e){}applyFS();render()}
+ else if(a=='feedback'){waOpen(FB_NUM,'TradeLog NG feedback\nShop: '+(S.shop||'')+'\n\n')}
  else if(a=='ff'){S.ff=v;render()}
  else if(a=='rall'){S.sheet='rall';render()}
  else if(a=='sendone'){const x=debtOf(v);if(!x)return;S.sent[x.id]=true;const msg='Hello '+x.customer_name.split(' (')[0]+', this is a reminder of '+naira(balOf(x))+' owed to '+(S.shop||'us')+'. Thank you.';render();waOpen(waNum(x.phone),msg)}
@@ -553,7 +575,7 @@ async function act(a,v){
  else if(a=='addsale'){const it=(S.d.item||'').trim()||'Sale',am=Number(S.d.amount),m=S.d.method||'Cash',day=dayOf();
   if(!(am>0)){toast('Type the amount');return}
   const addSale=(item,amt,meth)=>{const tmp=tmpId(),row={item:item,amount:amt,method:meth,sale_date:day};S.sales.push({id:tmp,...row,created_at:new Date().toISOString()});enqueue({k:'sale',cid:newCid(),tmp,row})};
-  if(m=='Credit'){const c=(S.d.cust||'').trim(),pn=Number(S.d.pn)||0,pm=S.d.pm||'Cash';
+  if(m=='Credit'){const c=canonName((S.d.cust||'').trim()),pn=Number(S.d.pn)||0,pm=S.d.pm||'Cash';
    if(!c){toast('Add the customer who owes');return}
    if(pn<0||pn>=am){toast(pn>=am?'Paid now must be less than the total. Use Cash or Transfer instead.':'Enter a valid amount');return}
    const owe=am-pn,row={customer_name:c,phone:(S.d.sph||'').trim()||null,amount:owe,due_date:S.d.cdue||off(7)},tmp=tmpId();
